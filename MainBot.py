@@ -37,4 +37,4 @@ async def ping_command(ctx):
 
 # --- INICIALIZAÇÃO DO BOT ---
 # Usa o token do arquivo .env para iniciar o bot.
-bot.run(os.getenv('TOKEN'))
+bot.run(os.getenv('DISCORD_TOKEN'))
