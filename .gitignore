@@ -1,0 +1,56 @@
+# ===================================================================
+# Arquivo de senhas e variáveis de ambiente
+# NUNCA suba este arquivo para o repositório! É o mais importante.
+# ===================================================================
+.env
+
+
+# ===================================================================
+# Ambientes Virtuais do Python
+# Ignora a pasta do venv para evitar subir megabytes de bibliotecas.
+# ===================================================================
+venv/
+.venv/
+env/
+.env/
+venv.bak/
+.env.bak/
+
+
+# ===================================================================
+# Cache e arquivos compilados do Python
+# Arquivos gerados automaticamente que não precisam ser versionados.
+# ===================================================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# ===================================================================
+# Arquivos de configuração de IDEs e editores de código
+# Evita conflitos de configuração pessoal entre desenvolvedores.
+# ===================================================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+
+# ===================================================================
+# Arquivos de sistema operacional
+# Ignora arquivos de metadados do macOS e Windows.
+# ===================================================================
+.DS_Store
+Thumbs.db
+
+
+# ===================================================================
+# Outros
+# Adicione aqui outros arquivos que você não queira no repositório.
+# Ex: logs/, downloads/, etc.
+# ===================================================================
+logs/
+
+# Cole suas credenciais aqui, sem aspas extras, a menos que o valor contenha espaços.
+
