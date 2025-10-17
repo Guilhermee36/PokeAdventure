@@ -1,40 +1,40 @@
 # main.py
 
 import discord
+from discord.ext import commands  # Importa a extensão de comandos
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- CONFIGURAÇÃO (como você já tem) ---
+# --- CONFIGURAÇÃO ---
+# Define as permissões (intents) que o bot precisa.
 intents = discord.Intents.default()
 intents.message_content = True  # Essencial para ler o conteúdo das mensagens
-client = discord.Client(intents=intents)
+
+# Cria uma instância do Bot, em vez de um Client.
+# O command_prefix define o caractere que ativa um comando (ex: '!')
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 # --- EVENTO DE CONEXÃO ---
-@client.event
+# Este evento é chamado quando o bot se conecta com sucesso ao Discord.
+@bot.event
 async def on_ready():
-    print(f'Logado com sucesso como {client.user.name}')
+    print(f'Logado com sucesso como {bot.user.name}')
+    print(f'ID do Bot: {bot.user.id}')
     print('------')
 
-# --- EVENTO DE MENSAGEM (NOVO) ---
-# Esta função é chamada toda vez que uma mensagem é enviada em um canal
-# que o bot consegue ver.
-@client.event
-async def on_message(message):
+# --- COMANDO DE TESTE ---
+# Usamos o decorador @bot.command() para registrar um novo comando.
+# O nome da função vira o nome do comando.
+@bot.command(name='ping')
+async def ping_command(ctx):
     """
-    Processa mensagens recebidas.
+    Comando de teste que responde com 'Pong!'.
+    'ctx' é o contexto, contendo informações como o canal, autor, etc.
     """
-    # 1. Ignorar mensagens do próprio bot
-    # Isso previne que o bot entre em um loop infinito de respostas.
-    if message.author == client.user:
-        return
-
-    # 2. Comando de teste !ping
-    # Verifica se a mensagem é exatamente '!ping'.
-    if message.content.lower() == '!ping':
-        # Envia a mensagem 'Pong!' de volta para o mesmo canal.
-        await message.channel.send('Pong!')
+    await ctx.send('Pong!')
 
 # --- INICIALIZAÇÃO DO BOT ---
-client.run(os.getenv('TOKEN'))
+# Usa o token do arquivo .env para iniciar o bot.
+bot.run(os.getenv('TOKEN'))
