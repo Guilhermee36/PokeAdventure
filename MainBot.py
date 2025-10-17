@@ -1,4 +1,4 @@
-# main.py
+# main.py bot
 
 import discord
 from discord.ext import commands  # Importa a extensão de comandos
