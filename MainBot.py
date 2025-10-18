@@ -58,7 +58,7 @@ class TestUIView(ui.View):
     async def danger_button(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_message("Você clicou no botão de perigo!", ephemeral=True)
 
-    @ui.button(label="Link", style=discord.ButtonStyle.link, url="https://pokeapi.co/", emoji="🔗")
+    @ui.button(label="Link", style=discord.ButtonStyle.link, emoji="🔗")
     async def link_button(self, interaction: discord.Interaction, button: ui.Button):
         # Botões de link não precisam de uma resposta, eles simplesmente abrem a URL.
         # O Discord não envia um evento de 'interaction' para o bot quando um botão de link é clicado.
