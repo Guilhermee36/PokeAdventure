@@ -5,16 +5,18 @@ from dotenv import load_dotenv
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
 
-# Cria a instância do bot
-# Usamos Intents para garantir que o bot receba os eventos que precisa
+# --- CORREÇÃO AQUI ---
+# 1. Primeiro, defina quais "intenções" o seu bot terá.
+#    'default()' é uma boa configuração inicial.
 intents = discord.Intents.default()
+
+# 2. Agora, crie a instância do bot, passando as 'intents' que você acabou de definir.
 bot = discord.Bot(intents=intents)
+# --------------------
 
 # Carrega todas as Cogs da pasta /cogs
-# O bot irá procurar por arquivos .py na pasta especificada
 for filename in os.listdir('./cogs'):
     if filename.endswith('.py'):
-        # O formato para carregar é 'pasta.nome_do_arquivo' sem o .py
         bot.load_extension(f'cogs.{filename[:-3]}')
         print(f"✅ Cog '{filename[:-3]}' carregada com sucesso.")
 
