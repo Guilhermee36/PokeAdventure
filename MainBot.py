@@ -1,31 +1,26 @@
 import discord
 import os
 from dotenv import load_dotenv
+from discord.ext import commands # <--- 1. Importe 'commands'
 
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
 Token = os.getenv('DISCORD_TOKEN')
 
-# Correção 1: 'discord.Client' com 'C' maiúsculo
-# Correção 2: Ativar as intents necessárias explicitamente é uma boa prática
+# Define as intents que seu bot precisa
 intents = discord.Intents.default()
-intents.message_content = True # Habilita a intent para ler o conteúdo das mensagens
+intents.message_content = True 
 
-bot = discord.Client(intents=intents)
+# 2. Use commands.Bot e defina um prefixo para os comandos
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def on_ready():
     print(f'Bot conectado como {bot.user}')
-
-# Correção 3: O evento 'on_message' deve estar fora do 'on_ready'
-@bot.event
-async def on_message(message):
-    # Ignora mensagens do próprio bot
-    if message.author == bot.user:
-        return
     
-    # Responde ao comando !ping
-    if message.content.startswith('!ping'):
-        await message.channel.send('Pong!')
-        
+# Com commands.Bot, você pode criar comandos assim:
+@bot.command()
+async def ping(ctx): # 'ctx' é o contexto, que inclui a mensagem, o canal, etc.
+    await ctx.send('Pong!')
+
 bot.run(Token)
