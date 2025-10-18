@@ -1,40 +1,61 @@
-# main.py bot
+# main.py
 
-import discord
-from discord.ext import commands  # Importa a extensão de comandos
 import os
+import random
+import discord
 from dotenv import load_dotenv
+from supabase import create_client, Client
+import openai # A importação pode ficar aqui para uso futuro, sem inicializar o cliente.
 
+# Carrega as variáveis de ambiente do arquivo .env para o ambiente de execução
 load_dotenv()
 
-# --- CONFIGURAÇÃO ---
-# Define as permissões (intents) que o bot precisa.
+# --- Configuração das Conexões ---
+
+# Busca as credenciais das variáveis de ambiente
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+# Validação para garantir que as variáveis essenciais foram carregadas
+if not all([DISCORD_TOKEN, SUPABASE_URL, SUPABASE_KEY]):
+    print("Erro: Uma ou mais variáveis de ambiente (DISCORD_TOKEN, SUPABASE_URL, SUPABASE_KEY) não foram definidas.")
+    exit()
+
+# Inicializa o cliente Supabase para interagir com seu banco de dados
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    print("Conexão com a Supabase estabelecida com sucesso.")
+except Exception as e:
+    print(f"Falha ao conectar com a Supabase: {e}")
+    exit()
+
+
+# --- Configuração do Bot do Discord ---
+
+# Define as "intenções" do bot (quais eventos ele deve escutar)
 intents = discord.Intents.default()
-intents.message_content = True  # Essencial para ler o conteúdo das mensagens
+intents.message_content = True  # Permite que o bot leia o conteúdo das mensagens
 
-# Cria uma instância do Bot, em vez de um Client.
-# O command_prefix define o caractere que ativa um comando (ex: '!')
-bot = commands.Bot(command_prefix='!', intents=intents)
+# Cria a instância do cliente do bot
+client = discord.Client(intents=intents)
 
-# --- EVENTO DE CONEXÃO ---
-# Este evento é chamado quando o bot se conecta com sucesso ao Discord.
-@bot.event
+# Evento que é disparado quando o bot fica online
+@client.event
 async def on_ready():
-    print(f'Logado com sucesso como {bot.user.name}')
-    print(f'ID do Bot: {bot.user.id}')
+    print(f'Bot conectado como {client.user}')
     print('------')
 
-# --- COMANDO DE TESTE ---
-# Usamos o decorador @bot.command() para registrar um novo comando.
-# O nome da função vira o nome do comando.
-@bot.command(name='ping')
-async def ping_command(ctx):
-    """
-    Comando de teste que responde com 'Pong!'.
-    'ctx' é o contexto, contendo informações como o canal, autor, etc.
-    """
-    await ctx.send('Pong!')
+# Evento que é disparado a cada nova mensagem em um canal que o bot pode ver
+@client.event
+async def on_message(message):
+    # Impede que o bot responda às suas próprias mensagens
+    if message.author == client.user:
+        return
 
-# --- INICIALIZAÇÃO DO BOT ---
-# Usa o token do arquivo .env para iniciar o bot.
-bot.run(os.getenv('DISCORD_TOKEN'))
+    # Comando de exemplo para testar o bot
+    if message.content.startswith('$hello'):
+        await message.channel.send(f'Olá, {message.author.name}!')
+
+# Inicia a execução do bot usando o token
+client.run(DISCORD_TOKEN)
