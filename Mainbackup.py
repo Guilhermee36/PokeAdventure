@@ -1,3 +1,4 @@
+"""
 import discord
 import os
 from dotenv import load_dotenv
@@ -23,4 +24,5 @@ async def on_ready():
 async def ping(ctx): # 'ctx' é o contexto, que inclui a mensagem, o canal, etc.
     await ctx.send('Pong!')
 
-bot.run(Token)
+bot.run(Token) 
+"""
