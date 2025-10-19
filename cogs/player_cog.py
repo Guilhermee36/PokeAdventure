@@ -6,7 +6,7 @@ from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
 # MUDANÇA: Importamos a nova função para buscar os dados principais do Pokémon
-from utils.pokeapi_service import get_data_from_url, get_total_xp_for_level, find_evolution_details, get_pokemon_data
+from utils.pokeapi_service import get_data_from_url, get_total_xp_for_level, find_evolution_details, get_pokemon_data, calculate_stats_for_level
 
 # ========= CLASSES DE UI (BOTÕES E MODALS) =========
 # (O resto das suas classes de UI continuam aqui, sem alterações...)
@@ -159,8 +159,7 @@ class PlayerCog(commands.Cog):
     @commands.is_owner()
     async def add_pokemon(self, ctx: commands.Context, *, pokemon_name: str):
         """
-        Adiciona um novo Pokémon à equipe do jogador.
-        Este comando busca os dados na PokeAPI e insere no banco de dados.
+        Adiciona um novo Pokémon à equipe do jogador com stats calculados.
         """
         try:
             if not await self.player_exists(ctx.author.id):
@@ -168,29 +167,34 @@ class PlayerCog(commands.Cog):
                 return
 
             pokemon_name_clean = pokemon_name.strip().lower()
-
-            # CORREÇÃO: Usamos a nova função get_pokemon_data para buscar do endpoint correto.
+            
             pokemon_data = await get_pokemon_data(pokemon_name_clean)
             if not pokemon_data:
                 await ctx.send(f"Não consegui encontrar um Pokémon chamado `{pokemon_name}`. Verifique o nome e tente novamente.")
                 return
 
-            # CORREÇÃO: Agora 'pokemon_data' contém a chave 'stats' e este código funcionará.
-            base_hp = next((stat['base_stat'] for stat in pokemon_data['stats'] if stat['stat']['name'] == 'hp'), 30)
+            # --- CORREÇÃO PRINCIPAL ---
+            # 1. Definimos o nível inicial
+            starting_level = 5
+            
+            # 2. Usamos a nova função para calcular todos os stats para o nível 5
+            calculated_stats = calculate_stats_for_level(pokemon_data['stats'], starting_level)
 
+            # 3. Construímos o dicionário com os novos campos do banco de dados
             new_pokemon_entry = {
                 'player_id': ctx.author.id,
                 'pokemon_api_name': pokemon_name_clean,
                 'nickname': pokemon_name_clean.capitalize(),
-                'current_level': 5,
+                'current_level': starting_level,
                 'current_xp': 0,
-                'current_hp': base_hp,
+                # O HP atual começa cheio, igual ao HP máximo calculado
+                'current_hp': calculated_stats.get('max_hp', 10),
+                # Usamos ** para adicionar todos os stats calculados (max_hp, attack, defense, etc.)
+                **calculated_stats
             }
 
             response = self.supabase.table('player_pokemon').insert(new_pokemon_entry).execute()
 
-            # Uma checagem mais robusta pode verificar o 'status_code' da resposta se a biblioteca suportar,
-            # mas verificar 'response.data' é geralmente suficiente para um insert simples.
             if not response.data:
                  await ctx.send("Ocorreu um erro ao tentar adicionar o Pokémon ao banco de dados.")
                  print(f"Erro na inserção do Supabase: {response}")
