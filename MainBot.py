@@ -15,6 +15,9 @@ intents.message_content = True
 # AQUI ESTÁ A CORREÇÃO: Usar commands.Bot em vez de discord.Client
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+
+bot.remove_command('help')
+
 @bot.event
 async def on_ready():
     print(f'Bot conectado como {bot.user}')
