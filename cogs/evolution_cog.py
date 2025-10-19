@@ -111,39 +111,39 @@ class EvolutionCog(commands.Cog):
             if min_level is not None and pokemon['current_level'] >= min_level:
                 await self.evolve_pokemon(pokemon['player_id'], pokemon['id'], new_form, channel)
     
-    # --- COMANDOS DE TESTE (CHEATS) ---
-
-    @commands.command(name='addpokemon', help='(Admin) Adiciona um novo Pokémon para você.')
-    @commands.is_owner()
-    async def add_pokemon(self, ctx: commands.Context, api_name: str, level: int, *, nickname: str = None):
-        if not nickname:
-            nickname = api_name.capitalize()
-        INITIAL_HP = 100 
-        pokemon_data = {'player_id': ctx.author.id, 'pokemon_api_name': api_name.lower(), 'nickname': nickname, 'current_level': level, 'current_hp': INITIAL_HP, 'current_xp': 0}
-        try:
-            response = self.supabase.table('player_pokemon').insert(pokemon_data).execute()
-            new_pokemon = response.data[0]
-            embed = discord.Embed(title="🌟 Pokémon Adicionado com Sucesso! 🌟", color=discord.Color.green())
-            embed.add_field(name="Nome", value=new_pokemon['pokemon_api_name'].capitalize(), inline=True).add_field(name="Apelido", value=new_pokemon['nickname'], inline=True).add_field(name="Nível", value=new_pokemon['current_level'], inline=True).set_footer(text=f"ID Único: {new_pokemon['id']}")
-            await ctx.send(embed=embed)
-        except Exception as e:
-            await ctx.send(f"❌ Ocorreu um erro ao adicionar o Pokémon: {e}")
+    # ========================================================================================
+    # ============================ COMANDOS PRINCIPAIS CORRIGIDOS ============================
+    # ========================================================================================
 
     @commands.command(name='givexp', help='(Admin) Dá XP para um dos seus Pokémon.')
     @commands.is_owner()
-    async def give_xp(self, ctx: commands.Context, pokemon_nickname: str, amount: int):
+    async def give_xp(self, ctx: commands.Context, amount: int, *, pokemon_nickname: str):
+        """Dá uma quantidade de XP para um Pokémon específico do jogador."""
         try:
-            response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_nickname).single().execute()
-            pokemon = response.data
+            # MUDANÇA 1: Usamos .execute() em vez de .single() para obter uma lista
+            response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_nickname).execute()
+
+            # MUDANÇA 2: Tratamos os casos de erro de forma específica
+            if not response.data:
+                await ctx.send(f"Não encontrei nenhum Pokémon com o nome `{pokemon_nickname}`.")
+                return
+            if len(response.data) > 1:
+                await ctx.send(f"Encontrei vários Pokémon com o nome `{pokemon_nickname}`. Por favor, use um apelido único.")
+                return
+
+            # Se tudo deu certo, pegamos o único resultado
+            pokemon = response.data[0]
+            
             new_xp = pokemon['current_xp'] + amount
             self.supabase.table('player_pokemon').update({'current_xp': new_xp}).eq('id', pokemon['id']).execute()
+            
             await ctx.send(f"Você deu {amount} XP para **{pokemon['nickname']}**. XP Total agora: {new_xp}.")
+            
             pokemon['current_xp'] = new_xp
             await self.check_for_level_up(pokemon, ctx.channel)
         except Exception as e:
-            await ctx.send(f"Ocorreu um erro. Verifique se o nome está correto e se você tem apenas um Pokémon com esse apelido. Detalhe: {e}")
-
-    # --- COMANDOS DO JOGADOR ---
+            await ctx.send(f"Ocorreu um erro inesperado ao dar XP.")
+            print(f"Erro no comando !givexp: {e}")
 
     @commands.command(name='team', help='Mostra todos os seus Pokémon.')
     async def team(self, ctx: commands.Context):
@@ -158,26 +158,46 @@ class EvolutionCog(commands.Cog):
             embed.set_thumbnail(url=ctx.author.avatar.url)
             for pokemon in response.data:
                 field_name = f"**{pokemon['nickname']}** ({pokemon['pokemon_api_name'].capitalize()})"
-                field_value = f"**Nível:** {pokemon['current_level']} | **XP:** {pokemon['current_xp']}"
+                field_value = f"**Nível:** {pokemon['current_level']} | **XP:** {pokemon['current_xp']} | **HP:** {pokemon['current_hp']}"
                 embed.add_field(name=field_name, value=field_value, inline=False)
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(f"Ocorreu um erro ao buscar sua equipe: {e}")
+            await ctx.send(f"Ocorreu um erro ao buscar sua equipe.")
+            print(f"Erro no comando !team: {e}")
 
     @commands.command(name='shop', help='Mostra a loja de itens evolutivos.')
     async def shop(self, ctx: commands.Context):
+        """Mostra uma loja 'hardcoded' com itens evolutivos."""
         embed = discord.Embed(title="🛒 Loja de Itens Evolutivos 🛒", color=discord.Color.blue())
-        embed.description = "Aqui você pode comprar pedras para evoluir seus Pokémon instantaneamente!\nUse o comando `!buy \"Nome do Item\" <Nome do Pokémon>`."
-        items = [{"name": "Fire Stone", "price": 5000}, {"name": "Water Stone", "price": 5000}, {"name": "Thunder Stone", "price": 5000}, {"name": "Leaf Stone", "price": 5000}]
+        embed.description = "Use o comando `!buy \"Nome do Item\" <Nome do Pokémon>`."
+        items = [
+            {"name": "Fire Stone", "price": 5000}, {"name": "Water Stone", "price": 5000},
+            {"name": "Thunder Stone", "price": 5000}, {"name": "Leaf Stone", "price": 5000},
+        ]
         for item in items:
-            embed.add_field(name=f"{item['name']} - `${item['price']}`", value="\u200b", inline=False)
+            embed.add_field(name=f"{item['name']} - `${item['price']:,}`", value="\u200b", inline=False)
         await ctx.send(embed=embed)
 
     @commands.command(name='buy', help='Compra um item evolutivo para um Pokémon.')
-    async def buy(self, ctx: commands.Context, item_name: str, pokemon_name: str):
+    async def buy(self, ctx: commands.Context, item_name: str, *, pokemon_name: str):
+        """Simula a compra e o uso imediato de um item para evolução."""
+        # MUDANÇA 1: O '*' antes de `pokemon_name` captura todo o resto da mensagem,
+        # permitindo nomes com espaços, como "Meu Pikachu".
         try:
-            pokemon_response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_name).single().execute()
-            pokemon = pokemon_response.data
+            # MUDANÇA 2: Usamos .execute() em vez de .single()
+            pokemon_response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_name.strip()).execute()
+
+            # MUDANÇA 3: Tratamos os erros de forma específica
+            if not pokemon_response.data:
+                await ctx.send(f"Não encontrei um Pokémon chamado `{pokemon_name}` na sua equipe.")
+                return
+            if len(pokemon_response.data) > 1:
+                await ctx.send(f"Encontrei vários Pokémon com o nome `{pokemon_name}`. Por favor, seja mais específico.")
+                return
+
+            pokemon = pokemon_response.data[0]
+            
+            # A lógica da PokéAPI continua a mesma
             species_data = await pokeapi_service.get_pokemon_species_data(pokemon['pokemon_api_name'])
             evo_chain_url = species_data['evolution_chain']['url']
             evo_chain_data = await pokeapi_service.get_data_from_url(evo_chain_url)
@@ -190,10 +210,12 @@ class EvolutionCog(commands.Cog):
                     await self.evolve_pokemon(ctx.author.id, pokemon['id'], new_form, ctx.channel)
                     found_match = True
                     break
+            
             if not found_match:
                 await ctx.send(f"O item **{item_name}** não parece ter efeito em **{pokemon_name}**.")
-        except Exception:
-            await ctx.send(f"Não encontrei um Pokémon chamado '{pokemon_name}' na sua equipe.")
+        except Exception as e:
+            await ctx.send(f"Ocorreu um erro inesperado no comando !buy.")
+            print(f"Erro no comando !buy: {e}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(EvolutionCog(bot))
