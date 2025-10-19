@@ -102,3 +102,24 @@ def calculate_stats_for_level(base_stats: list, level: int) -> dict:
         stats[db_col_name] = calculated_value
         
     return stats
+
+def get_initial_moves(pokemon_api_data: dict, starting_level: int) -> list:
+    """
+    Busca e retorna os 4 ataques mais recentes que um Pokémon aprendeu até um certo nível.
+    """
+    potential_moves = set() # Usamos um set para evitar ataques duplicados
+
+    for move_info in pokemon_api_data.get('moves', []):
+        for version_details in move_info.get('version_group_details', []):
+            if version_details.get('move_learn_method', {}).get('name') == 'level-up' and version_details.get('level_learned_at', 0) <= starting_level and version_details.get('level_learned_at', 0) > 0:
+                potential_moves.add(move_info['move']['name'])
+
+    # Ordena os ataques e pega os 4 últimos (os mais recentes)
+    sorted_moves = sorted(list(potential_moves))
+    initial_moves = sorted_moves[-4:]
+
+    # Preenche a lista com 'None' (que vira 'null' no JSONB) até ter 4 elementos
+    while len(initial_moves) < 4:
+        initial_moves.append(None)
+    
+    return initial_moves
