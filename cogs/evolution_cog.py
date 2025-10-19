@@ -5,12 +5,13 @@ import os
 from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
-# MUDANÇA: Importamos também get_pokemon_data para buscar a lista de ataques
-from utils.pokeapi_service import get_pokemon_species_data, get_pokemon_data, get_data_from_url, get_total_xp_for_level, find_evolution_details
+# MUDANÇA: Importamos get_pokemon_data para buscar stats base e a lista de ataques ao subir de nível
+from utils.pokeapi_service import get_pokemon_species_data, get_pokemon_data, get_data_from_url, get_total_xp_for_level, find_evolution_details, calculate_stats_for_level
 
-# --- CLASSE DE UI PARA ESCOLHA DE EVOLUÇÃO (Existente) ---
+# --- CLASSES DE UI ---
+
 class EvolutionChoiceView(ui.View):
-    # ... (seu código desta classe continua aqui, sem alterações)
+    """View para o jogador escolher uma evolução quando há múltiplas opções."""
     def __init__(self, pokemon_id: str, evolutions: list, evolution_cog):
         super().__init__(timeout=300)
         self.pokemon_id = pokemon_id
@@ -20,6 +21,7 @@ class EvolutionChoiceView(ui.View):
             button = ui.Button(label=evo_name.capitalize(), custom_id=evo_name, style=discord.ButtonStyle.primary)
             button.callback = self.button_callback
             self.add_item(button)
+
     async def button_callback(self, interaction: discord.Interaction):
         chosen_evolution = interaction.data['custom_id']
         await interaction.response.defer()
@@ -31,8 +33,8 @@ class EvolutionChoiceView(ui.View):
         )
         self.stop()
 
-# --- NOVA CLASSE DE UI PARA SUBSTITUIÇÃO DE ATAQUES ---
 class MoveReplaceView(ui.View):
+    """View para o jogador substituir um ataque quando a lista de 4 ataques está cheia."""
     def __init__(self, pokemon_id: str, new_move: str, current_moves: list, cog):
         super().__init__(timeout=180)
         self.pokemon_id = pokemon_id
@@ -64,80 +66,74 @@ class MoveReplaceView(ui.View):
         )
         self.stop()
 
-
 # ========= CLASSE DO COG =========
+
 class EvolutionCog(commands.Cog):
-    """Cog para gerenciar XP, level up, evolução e ataques dos Pokémon."""
+    """Cog para gerenciar XP, level up, stats, evolução e ataques dos Pokémon."""
 
     def __init__(self, bot: commands.Bot):
-        # ... (seu __init__ continua igual)
         self.bot = bot
         url: str = os.environ.get("SUPABASE_URL")
         key: str = os.environ.get("SUPABASE_KEY")
         self.supabase: Client = create_client(url, key)
         print("EvolutionCog carregado e conectado ao Supabase.")
 
-    # --- NOVA FUNÇÃO AUXILIAR PARA ATUALIZAR ATAQUES NO DB ---
+    # --- FUNÇÕES DE LÓGICA INTERNA ---
+
     async def _update_pokemon_moves(self, pokemon_id: str, new_move: str, slot: int):
-        """Atualiza a lista de ataques de um Pokémon no banco de dados."""
+        """Função auxiliar para atualizar a lista de ataques de um Pokémon no DB."""
         try:
-            # 1. Pega a lista de ataques atual
             response = self.supabase.table('player_pokemon').select('moves').eq('id', pokemon_id).single().execute()
             if not response.data: return
             
             current_moves = response.data['moves']
-            
-            # 2. Substitui o ataque no slot especificado
             current_moves[slot] = new_move
             
-            # 3. Envia a lista atualizada de volta para o Supabase
             self.supabase.table('player_pokemon').update({'moves': current_moves}).eq('id', pokemon_id).execute()
         except Exception as e:
             print(f"Erro ao atualizar ataques no DB: {e}")
 
-    # --- FUNÇÃO PRINCIPAL DA LÓGICA DE APRENDER ATAQUES ---
     async def check_for_new_moves(self, pokemon: dict, new_level: int, channel):
-        """Verifica se um Pokémon aprende um novo ataque no nível que acabou de atingir."""
+        """Verifica e processa TODOS os novos ataques que um Pokémon aprende em um nível."""
         pokemon_api_data = await get_pokemon_data(pokemon['pokemon_api_name'])
         if not pokemon_api_data: return
 
-        learned_move_name = None
-        # Itera na lista de ataques da API
+        newly_learned_moves = []
         for move_info in pokemon_api_data['moves']:
             for version_details in move_info['version_group_details']:
-                # Procura por um ataque que seja aprendido por 'level-up' no nível atual
                 if version_details['move_learn_method']['name'] == 'level-up' and version_details['level_learned_at'] == new_level:
-                    learned_move_name = move_info['move']['name']
-                    break
-            if learned_move_name:
-                break
+                    newly_learned_moves.append(move_info['move']['name'])
         
-        if learned_move_name:
-            # Se um ataque foi encontrado, começa a lógica para adicioná-lo
+        if not newly_learned_moves:
+            return
+
+        response = self.supabase.table('player_pokemon').select('moves').eq('id', pokemon['id']).single().execute()
+        if not response.data: return
+        current_moves = response.data['moves']
+
+        for move_name in newly_learned_moves:
+            if move_name in current_moves:
+                continue
+
             response = self.supabase.table('player_pokemon').select('moves').eq('id', pokemon['id']).single().execute()
-            if not response.data: return
-            
             current_moves = response.data['moves']
 
-            # Cenário 1: O Pokémon tem um slot de ataque vazio (null)
             if None in current_moves:
                 empty_slot_index = current_moves.index(None)
-                await self._update_pokemon_moves(pokemon['id'], learned_move_name, empty_slot_index)
-                await channel.send(f"💡 **{pokemon['nickname']}** aprendeu um novo ataque: **{learned_move_name.capitalize()}**!")
-            
-            # Cenário 2: O Pokémon já sabe 4 ataques
+                await self._update_pokemon_moves(pokemon['id'], move_name, empty_slot_index)
+                await channel.send(f"💡 **{pokemon['nickname']}** aprendeu um novo ataque: **{move_name.capitalize()}**!")
             else:
                 embed = discord.Embed(
-                    title=f"❓ Substituir Ataque?",
-                    description=f"**{pokemon['nickname']}** quer aprender **{learned_move_name.capitalize()}**, mas já conhece 4 ataques.\n\nEscolha um ataque para esquecer:",
+                    title="❓ Substituir Ataque?",
+                    description=f"**{pokemon['nickname']}** quer aprender **{move_name.capitalize()}**, mas já conhece 4 ataques.\n\nEscolha um ataque para esquecer:",
                     color=discord.Color.orange()
                 )
-                view = MoveReplaceView(pokemon['id'], learned_move_name, current_moves, self)
+                view = MoveReplaceView(pokemon['id'], move_name, current_moves, self)
                 await channel.send(embed=embed, view=view)
+                await view.wait()
 
-    # --- ATUALIZAÇÃO NA FUNÇÃO check_for_level_up ---
     async def check_for_level_up(self, pokemon: dict, channel):
-        """Verifica se um Pokémon tem XP suficiente para subir de nível."""
+        """Verifica se um Pokémon tem XP suficiente para subir de nível e atualiza stats."""
         species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
         if not species_data: return
 
@@ -148,36 +144,66 @@ class EvolutionCog(commands.Cog):
         while pokemon['current_xp'] >= xp_needed:
             new_level = pokemon['current_level'] + 1
             try:
-                self.supabase.table('player_pokemon').update({'current_level': new_level}).eq('id', pokemon['id']).execute()
-                await channel.send(f"✨ **{pokemon['nickname']}** subiu para o **nível {new_level}**!")
+                pokemon_api_data = await get_pokemon_data(pokemon['pokemon_api_name'])
+                if not pokemon_api_data: break
+
+                recalculated_stats = calculate_stats_for_level(pokemon_api_data['stats'], new_level)
+                
+                update_payload = {
+                    'current_level': new_level,
+                    **recalculated_stats
+                }
+
+                # CORREÇÃO: Atualiza o current_hp para o novo max_hp, restaurando a vida.
+                if 'max_hp' in recalculated_stats:
+                    update_payload['current_hp'] = recalculated_stats['max_hp']
+
+                self.supabase.table('player_pokemon').update(update_payload).eq('id', pokemon['id']).execute()
+                
+                await channel.send(f"✨ **{pokemon['nickname']}** subiu para o **nível {new_level}**! Seus stats aumentaram!")
+                
                 pokemon['current_level'] = new_level
                 
-                # MUDANÇA: Adicionamos a verificação de novos ataques logo após subir de nível
                 await self.check_for_new_moves(pokemon, new_level, channel)
-                
                 await self.check_evolution(pokemon, channel)
                 
                 xp_needed = await get_total_xp_for_level(growth_rate_url, new_level + 1)
             except Exception as e:
-                print(f"Erro ao atualizar nível no DB: {e}")
+                print(f"Erro ao atualizar nível e stats no DB: {e}")
                 break
-    
-    # ... O RESTO DO SEU CÓDIGO (check_evolution, give_xp, team, etc.) CONTINUA AQUI SEM ALTERAÇÕES ...
-    # (Copie o resto das suas funções para cá)
-    async def evolve_pokemon(self, discord_id: int, pokemon_db_id: str, new_pokemon_api_name: str, channel):
-        """Atualiza o nome do Pokémon no banco de dados para a sua nova forma."""
-        try:
-            response = self.supabase.table('player_pokemon').update({
-                'pokemon_api_name': new_pokemon_api_name, 'nickname': new_pokemon_api_name.capitalize()
-            }).eq('id', pokemon_db_id).execute()
 
-            if response.data:
-                await channel.send(f"🎉 <@{discord_id}>, seu Pokémon evoluiu para **{new_pokemon_api_name.capitalize()}**! 🎉")
+    async def evolve_pokemon(self, discord_id: int, pokemon_db_id: str, new_pokemon_api_name: str, channel):
+        """Atualiza os dados de um Pokémon no DB após evoluir."""
+        try:
+            # Pega o nível atual para recalcular os stats da nova forma
+            response = self.supabase.table('player_pokemon').select('current_level').eq('id', pokemon_db_id).single().execute()
+            if not response.data: return
+            
+            level = response.data['current_level']
+
+            # Pega os dados da API da nova forma evoluída
+            new_pokemon_api_data = await get_pokemon_data(new_pokemon_api_name)
+            if not new_pokemon_api_data: return
+
+            # Recalcula os stats para a nova forma no mesmo nível
+            recalculated_stats = calculate_stats_for_level(new_pokemon_api_data['stats'], level)
+
+            update_payload = {
+                'pokemon_api_name': new_pokemon_api_name,
+                'nickname': new_pokemon_api_name.capitalize(),
+                **recalculated_stats
+            }
+            if 'max_hp' in recalculated_stats:
+                update_payload['current_hp'] = recalculated_stats['max_hp']
+
+            self.supabase.table('player_pokemon').update(update_payload).eq('id', pokemon_db_id).execute()
+
+            await channel.send(f"🎉 <@{discord_id}>, seu Pokémon evoluiu para **{new_pokemon_api_name.capitalize()}**! 🎉")
         except Exception as e:
             print(f"Erro ao evoluir Pokémon: {e}")
 
     async def check_evolution(self, pokemon: dict, channel):
-        """Verifica as condições de evolução para um Pokémon após um level up."""
+        """Verifica as condições de evolução para um Pokémon."""
         species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
         if not species_data or not species_data.get('evolution_chain'): return
 
@@ -189,40 +215,34 @@ class EvolutionCog(commands.Cog):
         if not possible_evolutions: return
 
         if len(possible_evolutions) > 1:
-            embed = discord.Embed(
-                title=f"Decisão para {pokemon['nickname']}!",
-                description="Seu Pokémon está pronto para seguir um novo caminho. Escolha com sabedoria!",
-                color=discord.Color.gold()
-            )
             view = EvolutionChoiceView(pokemon['id'], possible_evolutions, self)
-            await channel.send(embed=embed, view=view)
+            await channel.send(f"Seu **{pokemon['nickname']}** está pronto para evoluir! Escolha seu caminho:", view=view)
             return
 
         next_evo = possible_evolutions[0]
         evo_details = next_evo['evolution_details'][0]
         trigger = evo_details['trigger']['name']
-        new_form = next_evo['species']['name']
         
         if trigger == 'level-up':
             min_level = evo_details.get('min_level')
             if min_level is not None and pokemon['current_level'] >= min_level:
+                new_form = next_evo['species']['name']
                 await self.evolve_pokemon(pokemon['player_id'], pokemon['id'], new_form, channel)
     
+    # --- COMANDOS DO JOGADOR ---
+
     @commands.command(name='givexp', help='(Admin) Dá XP para um dos seus Pokémon.')
     @commands.is_owner()
     async def give_xp(self, ctx: commands.Context, amount: int, *, pokemon_nickname: str):
         """Dá uma quantidade de XP para um Pokémon específico do jogador."""
         try:
-            response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_nickname).execute()
+            response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_nickname).single().execute()
 
             if not response.data:
                 await ctx.send(f"Não encontrei nenhum Pokémon com o nome `{pokemon_nickname}`.")
                 return
-            if len(response.data) > 1:
-                await ctx.send(f"Encontrei vários Pokémon com o nome `{pokemon_nickname}`. Por favor, use um apelido único.")
-                return
 
-            pokemon = response.data[0]
+            pokemon = response.data
             
             new_xp = pokemon['current_xp'] + amount
             self.supabase.table('player_pokemon').update({'current_xp': new_xp}).eq('id', pokemon['id']).execute()
@@ -248,11 +268,10 @@ class EvolutionCog(commands.Cog):
             embed.set_thumbnail(url=ctx.author.avatar.url)
             for pokemon in response.data:
                 field_name = f"**{pokemon['nickname']}** ({pokemon['pokemon_api_name'].capitalize()})"
-                # MUDANÇA: Exibe os ataques do Pokémon no !team
                 moves_list = [move.capitalize() for move in pokemon.get('moves', []) if move]
                 moves_display = ', '.join(moves_list) if moves_list else 'Nenhum'
                 field_value = (f"**Nível:** {pokemon['current_level']} | **XP:** {pokemon['current_xp']}\n"
-                               f"**HP:** {pokemon['current_hp']}/{pokemon['max_hp']}\n"
+                               f"**HP:** {pokemon.get('current_hp', 0)}/{pokemon.get('max_hp', 0)}\n"
                                f"**Ataques:** {moves_display}")
                 embed.add_field(name=field_name, value=field_value, inline=False)
             await ctx.send(embed=embed)
@@ -260,10 +279,9 @@ class EvolutionCog(commands.Cog):
             await ctx.send(f"Ocorreu um erro ao buscar sua equipe.")
             print(f"Erro no comando !team: {e}")
 
-    # ... (shop e buy continuam iguais) ...
     @commands.command(name='shop', help='Mostra a loja de itens evolutivos.')
     async def shop(self, ctx: commands.Context):
-        """Mostra uma loja 'hardcoded' com itens evolutivos."""
+        """Mostra uma loja com itens evolutivos."""
         embed = discord.Embed(title="🛒 Loja de Itens Evolutivos 🛒", color=discord.Color.blue())
         embed.description = "Use o comando `!buy \"Nome do Item\" <Nome do Pokémon>`."
         items = [
@@ -278,16 +296,13 @@ class EvolutionCog(commands.Cog):
     async def buy(self, ctx: commands.Context, item_name: str, *, pokemon_name: str):
         """Simula a compra e o uso imediato de um item para evolução."""
         try:
-            pokemon_response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_name.strip()).execute()
+            pokemon_response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_name.strip()).single().execute()
 
             if not pokemon_response.data:
                 await ctx.send(f"Não encontrei um Pokémon chamado `{pokemon_name}` na sua equipe.")
                 return
-            if len(pokemon_response.data) > 1:
-                await ctx.send(f"Encontrei vários Pokémon com o nome `{pokemon_name}`. Por favor, seja mais específico.")
-                return
 
-            pokemon = pokemon_response.data[0]
+            pokemon = pokemon_response.data
             
             species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
             if not species_data or not species_data.get('evolution_chain'):
@@ -303,6 +318,7 @@ class EvolutionCog(commands.Cog):
                 details = evo['evolution_details'][0]
                 if details['trigger']['name'] == 'use-item' and details.get('item') and details['item']['name'] == item_name.lower().replace(' ', '-'):
                     new_form = evo['species']['name']
+                    # Adicionar lógica de custo do item aqui
                     await self.evolve_pokemon(ctx.author.id, pokemon['id'], new_form, ctx.channel)
                     found_match = True
                     break
@@ -312,7 +328,6 @@ class EvolutionCog(commands.Cog):
         except Exception as e:
             await ctx.send(f"Ocorreu um erro inesperado no comando !buy.")
             print(f"Erro no comando !buy: {e}")
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(EvolutionCog(bot))
