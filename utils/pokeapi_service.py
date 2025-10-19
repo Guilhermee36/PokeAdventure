@@ -1,20 +1,26 @@
 # pokeapi_service.py
 
 import httpx
+import aiohttp
 from functools import lru_cache
 
 BASE_URL = "https://pokeapi.co/api/v2"
 
 @lru_cache(maxsize=128)
-async def get_pokemon_species_data(pokemon_name: str) -> dict:
-    """Busca dados da espécie de um Pokémon (contém growth_rate e evolution_chain_url)."""
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(f"{BASE_URL}/pokemon-species/{pokemon_name.lower()}")
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError:
-            return None
+async def get_pokemon_data(pokemon_name: str) -> dict | None:
+    """Busca os dados principais de um Pokémon (incluindo stats) da PokeAPI.
+    Args:
+        pokemon_name (str): O nome do Pokémon.
+    Returns:
+        dict | None: Um dicionário com os dados do Pokémon se encontrado, senão None.
+    """
+    url = f"https://pokeapi.co/api/v2/pokemon/{pokemon_name.lower()}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                return await response.json()
+            else:
+                return None
 
 @lru_cache(maxsize=32)
 async def get_data_from_url(url: str) -> dict:
