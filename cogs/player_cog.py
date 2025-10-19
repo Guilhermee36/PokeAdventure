@@ -1,8 +1,12 @@
+
+# player_cog.py
+
 import discord
 import os
 from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
+from utils import pokeapi_service # Importação do nosso serviço da PokeAPI
 
 # ========= CLASSES DE UI (BOTÕES E MODALS) =========
 
@@ -49,28 +53,28 @@ class RegionSelectView(ui.View):
 
     @ui.button(label="Kanto", style=discord.ButtonStyle.primary, emoji="1️⃣")
     async def kanto(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Kanto")
-    
+
     @ui.button(label="Johto", style=discord.ButtonStyle.primary, emoji="2️⃣")
     async def johto(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Johto")
-    
+
     @ui.button(label="Hoenn", style=discord.ButtonStyle.primary, emoji="3️⃣")
     async def hoenn(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Hoenn")
-    
+
     @ui.button(label="Sinnoh", style=discord.ButtonStyle.primary, emoji="4️⃣")
     async def sinnoh(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Sinnoh")
-    
+
     @ui.button(label="Unova", style=discord.ButtonStyle.primary, emoji="5️⃣")
     async def unova(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Unova")
-    
+
     @ui.button(label="Kalos", style=discord.ButtonStyle.primary, emoji="6️⃣")
     async def kalos(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Kalos")
-    
+
     @ui.button(label="Alola", style=discord.ButtonStyle.primary, emoji="7️⃣")
     async def alola(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Alola")
-    
+
     @ui.button(label="Galar", style=discord.ButtonStyle.primary, emoji="8️⃣")
     async def galar(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Galar")
-    
+
     @ui.button(label="Paldea", style=discord.ButtonStyle.primary, emoji="9️⃣")
     async def paldea(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Paldea")
 
@@ -83,8 +87,10 @@ class ConfirmDeleteView(ui.View):
     async def confirm(self, interaction: discord.Interaction, button: ui.Button):
         discord_id = interaction.user.id
         try:
+            # Primeiro, exclui os pokémons associados ao jogador
+            self.supabase.table('player_pokemon').delete().eq('player_id', discord_id).execute()
+            # Depois, exclui o jogador
             self.supabase.table('players').delete().eq('discord_id', discord_id).execute()
-            # Idealmente, também deletaria os pokémons e inventário associados
             await interaction.response.send_message("Sua jornada foi reiniciada. Todo o progresso foi excluído. Use `!start` para começar de novo.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"Ocorreu um erro ao excluir seus dados: {e}", ephemeral=True)
@@ -134,7 +140,7 @@ class PlayerCog(commands.Cog):
         try:
             response = self.supabase.table('players').select('*').eq('discord_id', discord_id).single().execute()
             player = response.data
-            
+
             embed = discord.Embed(title=f"Perfil de Treinador: {player['trainer_name']}", color=discord.Color.green())
             embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar.url)
             embed.add_field(name="💰 Dinheiro", value=f"${player['money']:,}", inline=True)
@@ -143,6 +149,61 @@ class PlayerCog(commands.Cog):
             await ctx.send(embed=embed)
         except Exception:
             await ctx.send(f"Você ainda não começou sua jornada, {ctx.author.mention}. Use `!start` para iniciar!")
+
+    # =====================================================================================
+    # ============================ NOVO COMANDO ADDPOKEMON ================================
+    # =====================================================================================
+
+    @commands.command(name='addpokemon', help='(Admin) Adiciona um Pokémon à sua equipe.')
+    @commands.is_owner() # Garante que só o dono do bot possa usar este comando para testes
+    async def add_pokemon(self, ctx: commands.Context, *, pokemon_name: str):
+        """
+        Adiciona um novo Pokémon à equipe do jogador.
+        Este comando busca os dados na PokeAPI e insere no banco de dados.
+        """
+        try:
+            # 1. VERIFICA SE O JOGADOR EXISTE
+            if not await self.player_exists(ctx.author.id):
+                await ctx.send(f"Você precisa iniciar sua jornada primeiro! Use `!start`.")
+                return
+
+            pokemon_name_clean = pokemon_name.strip().lower()
+
+            # 2. BUSCA DADOS NA POKEAPI
+            pokemon_data = await pokeapi_service.get_pokemon_data(pokemon_name_clean)
+            if not pokemon_data:
+                await ctx.send(f"Não consegui encontrar um Pokémon chamado `{pokemon_name}`. Verifique o nome e tente novamente.")
+                return
+
+            # 3. EXTRAI O HP BASE PARA DEFINIR O HP ATUAL INICIAL
+            # Usamos 'next' para encontrar o HP de forma segura na lista de stats
+            base_hp = next((stat['base_stat'] for stat in pokemon_data['stats'] if stat['stat']['name'] == 'hp'), 30) # 30 como fallback
+
+            # 4. PREPARA OS DADOS PARA O BANCO
+            new_pokemon_entry = {
+                'player_id': ctx.author.id,
+                'pokemon_api_name': pokemon_name_clean,
+                'nickname': pokemon_name_clean.capitalize(),
+                'current_level': 5,  # Nível inicial padrão
+                'current_xp': 0,
+                'current_hp': base_hp,
+                # Adicione outros campos com valores padrão se sua tabela tiver mais colunas
+            }
+
+            # 5. INSERE NO BANCO DE DADOS
+            response = self.supabase.table('player_pokemon').insert(new_pokemon_entry).execute()
+
+            # Verificação de erro na inserção (opcional, mas recomendado)
+            if not response.data:
+                 await ctx.send("Ocorreu um erro ao tentar adicionar o Pokémon ao banco de dados.")
+                 print(f"Erro na inserção do Supabase: {response}")
+                 return
+
+            await ctx.send(f"🎉 **{pokemon_name.capitalize()}** foi adicionado à sua equipe no nível 5! 🎉")
+
+        except Exception as e:
+            await ctx.send("Ocorreu um erro inesperado ao tentar adicionar o Pokémon.")
+            print(f"Erro no comando !addpokemon: {e}")
 
     @commands.command(name='delete', help='Exclui permanentemente seu progresso para começar de novo.')
     async def delete_journey(self, ctx: commands.Context):
@@ -166,23 +227,20 @@ class PlayerCog(commands.Cog):
             embed.add_field(name="`!delete`", value="Apaga seu progresso para começar uma nova jornada.", inline=False)
             embed.set_footer(text="Para ver a lista completa de comandos, digite `!help all`.")
             await ctx.send(embed=embed)
-            
+
         elif option.lower() == 'all':
             embed = discord.Embed(title="Ajuda - Todos os Comandos", description="Lista completa de todos os comandos disponíveis.", color=discord.Color.dark_blue())
-            
+
             # Este loop encontra TODOS os comandos de TODOS os cogs.
             for command in sorted(self.bot.commands, key=lambda c: c.name):
-                # Se você quiser esconder os cheats de admin, adicione `hidden=True` neles
-                # e descomente a linha abaixo.
-                # if not command.hidden and command.name != 'help':
-                if command.name != 'help':
+                if command.name != 'help' and not command.hidden:
                     embed.add_field(
                         name=f"`!{command.name}`",
                         value=command.help or "Sem descrição disponível.",
                         inline=False
                     )
             await ctx.send(embed=embed)
-        
+
         else:
             await ctx.send(f"Opção `{option}` inválida. Use `!help` ou `!help all`.")
 
