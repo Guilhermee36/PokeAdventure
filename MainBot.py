@@ -2,7 +2,7 @@ import discord
 import os
 import asyncio
 from dotenv import load_dotenv
-from discord.ext import commands
+from discord.ext import commands # <--- Importante ter 'commands'
 
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -12,7 +12,7 @@ Token = os.getenv('DISCORD_TOKEN')
 intents = discord.Intents.default()
 intents.message_content = True 
 
-# Use commands.Bot e defina um prefixo para os comandos
+# AQUI ESTÁ A CORREÇÃO: Usar commands.Bot em vez de discord.Client
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
@@ -22,11 +22,15 @@ async def on_ready():
 
 async def load_cogs():
     """Encontra e carrega todas as extensões (cogs) na pasta /cogs."""
+    # O caminho é relativo a onde o main.py está.
     for filename in os.listdir('./cogs'):
         if filename.endswith('.py'):
-            # O nome da extensão é o nome do arquivo sem '.py'
-            await bot.load_extension(f'cogs.{filename[:-3]}')
-            print(f'Cog {filename} carregado.')
+            try:
+                # O nome da extensão é 'cogs.' + nome do arquivo sem '.py'
+                await bot.load_extension(f'cogs.{filename[:-3]}')
+                print(f'Cog {filename} carregado com sucesso.')
+            except Exception as e:
+                print(f'Falha ao carregar o cog {filename}. Erro: {e}')
 
 async def main():
     """Função principal para carregar os cogs e iniciar o bot."""
@@ -36,4 +40,7 @@ async def main():
 
 # Ponto de entrada para executar o bot
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot desligado.")
