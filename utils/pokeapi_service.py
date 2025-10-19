@@ -13,7 +13,6 @@ async def get_data_from_url(url: str):
     """
     # 1. Verifica se o resultado para esta URL já está no cache.
     if url in api_cache:
-        # Se estiver, retorna o dado salvo imediatamente.
         return api_cache[url]
 
     # 2. Se não estiver no cache, faz a requisição HTTP.
@@ -28,34 +27,34 @@ async def get_data_from_url(url: str):
             return None
 
 async def get_pokemon_data(pokemon_name_or_id: str):
-    """Busca dados principais de um Pokémon (endpoint /pokemon/)."""
+    """
+    Busca dados de BATALHA de um Pokémon (stats, types, etc.).
+    Endpoint: /pokemon/{id}
+    Usado por: !addpokemon
+    """
     url = f"{BASE_URL}/pokemon/{str(pokemon_name_or_id).lower()}"
     return await get_data_from_url(url)
 
 async def get_pokemon_species_data(pokemon_name_or_id: str):
     """
-    Busca dados da espécie de um Pokémon (endpoint /pokemon-species/).
-    Essencial para obter a URL da cadeia de evolução.
+    Busca dados de ESPÉCIE de um Pokémon (growth_rate, evolution_chain).
+    Endpoint: /pokemon-species/{id}
+    Usado por: !givexp (level up e evolução)
     """
-    # Precisamos desta função para a lógica de evolução funcionar corretamente.
-    pokemon_data = await get_pokemon_data(pokemon_name_or_id)
-    if pokemon_data and 'species' in pokemon_data:
-        species_url = pokemon_data['species']['url']
-        return await get_data_from_url(species_url)
-    return None
+    url = f"{BASE_URL}/pokemon-species/{str(pokemon_name_or_id).lower()}"
+    return await get_data_from_url(url)
 
 async def get_total_xp_for_level(growth_rate_url: str, level: int) -> int:
     """Busca a tabela de XP e retorna o total necessário para um nível específico."""
     growth_data = await get_data_from_url(growth_rate_url)
     if not growth_data:
-        return float('inf') # Retorna um número enorme se a busca falhar
+        return float('inf')
 
-    # Procura o nível exato na lista de "levels" da API.
     for level_info in growth_data.get('levels', []):
         if level_info.get('level') == level:
             return level_info['experience']
             
-    return float('inf') # Retorna se o nível não for encontrado
+    return float('inf')
 
 def find_evolution_details(chain: dict, current_pokemon_name: str) -> list | None:
     """
@@ -63,13 +62,10 @@ def find_evolution_details(chain: dict, current_pokemon_name: str) -> list | Non
     a partir do nome do Pokémon atual na cadeia de evolução.
     """
     if chain.get('species', {}).get('name') == current_pokemon_name:
-        # Encontramos o Pokémon, retornamos a lista de suas próximas evoluções.
         return chain.get('evolves_to', [])
 
-    # Se não for o atual, busca recursivamente nas próximas evoluções.
     for evolution in chain.get('evolves_to', []):
         result = find_evolution_details(evolution, current_pokemon_name)
-        # O 'is not None' é importante para não parar em ramos sem evolução.
         if result is not None:
             return result
             
