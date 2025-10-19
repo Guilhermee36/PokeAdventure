@@ -1,4 +1,3 @@
-
 # player_cog.py
 
 import discord
@@ -6,10 +5,11 @@ import os
 from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
-from utils import pokeapi_service # Importação do nosso serviço da PokeAPI
-from utils.pokeapi_service import get_pokemon_species_data, get_data_from_url, get_total_xp_for_level, find_evolution_details
+# MUDANÇA: Importamos a nova função para buscar os dados principais do Pokémon
+from utils.pokeapi_service import get_pokemon_species_data, get_data_from_url, get_total_xp_for_level, find_evolution_details, get_pokemon_data
 
 # ========= CLASSES DE UI (BOTÕES E MODALS) =========
+# (O resto das suas classes de UI continuam aqui, sem alterações...)
 
 class StartJourneyView(ui.View):
     """View inicial que aparece com o comando !start."""
@@ -152,7 +152,7 @@ class PlayerCog(commands.Cog):
             await ctx.send(f"Você ainda não começou sua jornada, {ctx.author.mention}. Use `!start` para iniciar!")
 
     # =====================================================================================
-    # ============================ NOVO COMANDO ADDPOKEMON ================================
+    # ============================ COMANDO ADDPOKEMON CORRIGIDO ===========================
     # =====================================================================================
 
     @commands.command(name='addpokemon', help='(Admin) Adiciona um Pokémon à sua equipe.')
@@ -169,12 +169,13 @@ class PlayerCog(commands.Cog):
 
             pokemon_name_clean = pokemon_name.strip().lower()
 
-            # MUDANÇA: Chamamos a função diretamente, sem o "pokeapi_service."
-            pokemon_data = await get_pokemon_species_data(pokemon_name_clean)
+            # CORREÇÃO: Usamos a nova função get_pokemon_data para buscar do endpoint correto.
+            pokemon_data = await get_pokemon_data(pokemon_name_clean)
             if not pokemon_data:
                 await ctx.send(f"Não consegui encontrar um Pokémon chamado `{pokemon_name}`. Verifique o nome e tente novamente.")
                 return
 
+            # CORREÇÃO: Agora 'pokemon_data' contém a chave 'stats' e este código funcionará.
             base_hp = next((stat['base_stat'] for stat in pokemon_data['stats'] if stat['stat']['name'] == 'hp'), 30)
 
             new_pokemon_entry = {
@@ -188,6 +189,8 @@ class PlayerCog(commands.Cog):
 
             response = self.supabase.table('player_pokemon').insert(new_pokemon_entry).execute()
 
+            # Uma checagem mais robusta pode verificar o 'status_code' da resposta se a biblioteca suportar,
+            # mas verificar 'response.data' é geralmente suficiente para um insert simples.
             if not response.data:
                  await ctx.send("Ocorreu um erro ao tentar adicionar o Pokémon ao banco de dados.")
                  print(f"Erro na inserção do Supabase: {response}")
