@@ -6,7 +6,7 @@ from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
 # MUDANÇA: Importamos a nova função para buscar os dados principais do Pokémon
-from utils.pokeapi_service import get_data_from_url, get_total_xp_for_level, find_evolution_details, get_pokemon_data, calculate_stats_for_level
+from utils.pokeapi_service import get_data_from_url, get_total_xp_for_level, find_evolution_details, get_pokemon_data, calculate_stats_for_level, get_initial_moves
 
 # ========= CLASSES DE UI (BOTÕES E MODALS) =========
 # (O resto das suas classes de UI continuam aqui, sem alterações...)
@@ -158,9 +158,7 @@ class PlayerCog(commands.Cog):
     @commands.command(name='addpokemon', help='(Admin) Adiciona um Pokémon à sua equipe.')
     @commands.is_owner()
     async def add_pokemon(self, ctx: commands.Context, *, pokemon_name: str):
-        """
-        Adiciona um novo Pokémon à equipe do jogador com stats calculados.
-        """
+        # ... (código de verificação do jogador e busca do pokemon_data)
         try:
             if not await self.player_exists(ctx.author.id):
                 await ctx.send(f"Você precisa iniciar sua jornada primeiro! Use `!start`.")
@@ -173,26 +171,24 @@ class PlayerCog(commands.Cog):
                 await ctx.send(f"Não consegui encontrar um Pokémon chamado `{pokemon_name}`. Verifique o nome e tente novamente.")
                 return
 
-            # --- CORREÇÃO PRINCIPAL ---
-            # 1. Definimos o nível inicial
             starting_level = 5
-            
-            # 2. Usamos a nova função para calcular todos os stats para o nível 5
             calculated_stats = calculate_stats_for_level(pokemon_data['stats'], starting_level)
 
-            # 3. Construímos o dicionário com os novos campos do banco de dados
+            # --- MUDANÇA: Buscamos e adicionamos os ataques iniciais ---
+            initial_moves = get_initial_moves(pokemon_data, starting_level)
+
             new_pokemon_entry = {
                 'player_id': ctx.author.id,
                 'pokemon_api_name': pokemon_name_clean,
                 'nickname': pokemon_name_clean.capitalize(),
                 'current_level': starting_level,
                 'current_xp': 0,
-                # O HP atual começa cheio, igual ao HP máximo calculado
                 'current_hp': calculated_stats.get('max_hp', 10),
-                # Usamos ** para adicionar todos os stats calculados (max_hp, attack, defense, etc.)
+                'moves': initial_moves, # Adicionamos a lista de ataques
                 **calculated_stats
             }
 
+            # ... (código de inserção no Supabase e mensagem de sucesso)
             response = self.supabase.table('player_pokemon').insert(new_pokemon_entry).execute()
 
             if not response.data:
