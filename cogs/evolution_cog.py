@@ -6,7 +6,7 @@ from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
 # MUDANÇA 1: Importamos as funções diretamente do serviço da API
-from utils.pokeapi_service import get_pokemon_species_data, get_data_from_url, get_total_xp_for_level, find_evolution_details
+from utils.pokeapi_service import get_pokemon_data, get_data_from_url, get_total_xp_for_level, find_evolution_details
 
 # (A classe EvolutionChoiceView continua a mesma)
 class EvolutionChoiceView(ui.View):
@@ -58,7 +58,7 @@ class EvolutionCog(commands.Cog):
     async def check_for_level_up(self, pokemon: dict, channel):
         """Verifica se um Pokémon tem XP suficiente para subir de nível."""
         # MUDANÇA 2: Chamamos a função diretamente, sem o "pokeapi_service."
-        species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
+        species_data = await get_pokemon_data(pokemon['pokemon_api_name'])
         if not species_data: return
 
         growth_rate_url = species_data['growth_rate']['url']
@@ -82,7 +82,7 @@ class EvolutionCog(commands.Cog):
 
     async def check_evolution(self, pokemon: dict, channel):
         """Verifica as condições de evolução para um Pokémon após um level up."""
-        species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
+        species_data = await get_pokemon_data(pokemon['pokemon_api_name'])
         if not species_data or not species_data.get('evolution_chain'): return
 
         evo_chain_url = species_data['evolution_chain']['url']
@@ -191,7 +191,7 @@ class EvolutionCog(commands.Cog):
 
             pokemon = pokemon_response.data[0]
             
-            species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
+            species_data = await get_pokemon_data(pokemon['pokemon_api_name'])
             evo_chain_url = species_data['evolution_chain']['url']
             evo_chain_data = await get_data_from_url(evo_chain_url)
             possible_evolutions = find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])

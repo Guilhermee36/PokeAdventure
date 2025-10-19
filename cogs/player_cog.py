@@ -6,7 +6,7 @@ from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
 # MUDANÇA: Importamos a nova função para buscar os dados principais do Pokémon
-from utils.pokeapi_service import get_pokemon_species_data, get_data_from_url, get_total_xp_for_level, find_evolution_details, get_pokemon_data
+from utils.pokeapi_service import get_data_from_url, get_total_xp_for_level, find_evolution_details, get_pokemon_data
 
 # ========= CLASSES DE UI (BOTÕES E MODALS) =========
 # (O resto das suas classes de UI continuam aqui, sem alterações...)
