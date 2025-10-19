@@ -5,7 +5,7 @@ import os
 from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
-import pokeapi_service # Importamos nosso serviço
+from utils import pokeapi_service # Importação correta do serviço
 
 # (A classe EvolutionChoiceView continua a mesma)
 class EvolutionChoiceView(ui.View):
@@ -41,13 +41,12 @@ class EvolutionCog(commands.Cog):
         self.supabase: Client = create_client(url, key)
         print("EvolutionCog carregado e conectado ao Supabase.")
 
-    # --- (As funções de lógica interna como call_openai, evolve_pokemon, etc., continuam as mesmas) ---
-    # ... (código das funções internas omitido por brevidade, ele não muda) ...
+    # --- Funções de Lógica Interna ---
     async def evolve_pokemon(self, discord_id: int, pokemon_db_id: str, new_pokemon_api_name: str, channel):
         """Atualiza o nome do Pokémon no banco de dados para a sua nova forma."""
         try:
             response = self.supabase.table('player_pokemon').update({
-                'pokemon_api_name': new_pokemon_api_name, 'nickname': new_pokemon_api_name.capitalize() # Atualiza o apelido também
+                'pokemon_api_name': new_pokemon_api_name, 'nickname': new_pokemon_api_name.capitalize()
             }).eq('id', pokemon_db_id).execute()
 
             if response.data:
@@ -64,15 +63,20 @@ class EvolutionCog(commands.Cog):
         next_level = pokemon['current_level'] + 1
         xp_needed = await pokeapi_service.get_total_xp_for_level(growth_rate_url, next_level)
 
-        if pokemon['current_xp'] >= xp_needed:
+        # Loop para permitir múltiplos level ups de uma vez
+        while pokemon['current_xp'] >= xp_needed:
             new_level = pokemon['current_level'] + 1
             try:
                 self.supabase.table('player_pokemon').update({'current_level': new_level}).eq('id', pokemon['id']).execute()
                 await channel.send(f"✨ **{pokemon['nickname']}** subiu para o **nível {new_level}**!")
                 pokemon['current_level'] = new_level
-                await self.check_evolution(pokemon, channel)
+                await self.check_evolution(pokemon, channel) # Verifica evolução a cada nível
+                
+                # Atualiza o xp_needed para o próximo nível
+                xp_needed = await pokeapi_service.get_total_xp_for_level(growth_rate_url, new_level + 1)
             except Exception as e:
                 print(f"Erro ao atualizar nível no DB: {e}")
+                break # Sai do loop se houver um erro
 
     async def check_evolution(self, pokemon: dict, channel):
         """Verifica as condições de evolução para um Pokémon após um level up."""
@@ -101,62 +105,39 @@ class EvolutionCog(commands.Cog):
         trigger = evo_details['trigger']['name']
         new_form = next_evo['species']['name']
         
-        if trigger == 'level-up' and pokemon['current_level'] >= evo_details['min_level']:
-            await self.evolve_pokemon(pokemon['player_id'], pokemon['id'], new_form, channel)
+        if trigger == 'level-up':
+             # A API pode retornar min_level como None, então tratamos esse caso
+            min_level = evo_details.get('min_level')
+            if min_level is not None and pokemon['current_level'] >= min_level:
+                await self.evolve_pokemon(pokemon['player_id'], pokemon['id'], new_form, channel)
+    
     # --- COMANDOS DE TESTE (CHEATS) ---
 
     @commands.command(name='addpokemon', help='(Admin) Adiciona um novo Pokémon para você.')
     @commands.is_owner()
     async def add_pokemon(self, ctx: commands.Context, api_name: str, level: int, *, nickname: str = None):
-        """
-        Adiciona um Pokémon diretamente à sua coleção para fins de teste.
-        Ex: !addpokemon pikachu 25 Meu Trovão
-        """
         if not nickname:
             nickname = api_name.capitalize()
-        
-        # O HP inicial deveria ser calculado com base nos stats da API, mas para um cheat, um valor fixo é suficiente.
         INITIAL_HP = 100 
-
-        pokemon_data = {
-            'player_id': ctx.author.id,
-            'pokemon_api_name': api_name.lower(),
-            'nickname': nickname,
-            'current_level': level,
-            'current_hp': INITIAL_HP,
-            'current_xp': 0 # Começa com 0 XP no nível atual
-        }
-
+        pokemon_data = {'player_id': ctx.author.id, 'pokemon_api_name': api_name.lower(), 'nickname': nickname, 'current_level': level, 'current_hp': INITIAL_HP, 'current_xp': 0}
         try:
             response = self.supabase.table('player_pokemon').insert(pokemon_data).execute()
             new_pokemon = response.data[0]
-
             embed = discord.Embed(title="🌟 Pokémon Adicionado com Sucesso! 🌟", color=discord.Color.green())
-            embed.add_field(name="Nome", value=new_pokemon['pokemon_api_name'].capitalize(), inline=True)
-            embed.add_field(name="Apelido", value=new_pokemon['nickname'], inline=True)
-            embed.add_field(name="Nível", value=new_pokemon['current_level'], inline=True)
-            embed.add_field(name="HP", value=new_pokemon['current_hp'], inline=True)
-            embed.add_field(name="XP", value=new_pokemon['current_xp'], inline=True)
-            embed.set_footer(text=f"ID Único: {new_pokemon['id']}")
-            
+            embed.add_field(name="Nome", value=new_pokemon['pokemon_api_name'].capitalize(), inline=True).add_field(name="Apelido", value=new_pokemon['nickname'], inline=True).add_field(name="Nível", value=new_pokemon['current_level'], inline=True).set_footer(text=f"ID Único: {new_pokemon['id']}")
             await ctx.send(embed=embed)
-
         except Exception as e:
             await ctx.send(f"❌ Ocorreu um erro ao adicionar o Pokémon: {e}")
 
     @commands.command(name='givexp', help='(Admin) Dá XP para um dos seus Pokémon.')
     @commands.is_owner()
     async def give_xp(self, ctx: commands.Context, pokemon_nickname: str, amount: int):
-        """Dá uma quantidade de XP para um Pokémon específico do jogador."""
         try:
             response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_nickname).single().execute()
             pokemon = response.data
-            
             new_xp = pokemon['current_xp'] + amount
             self.supabase.table('player_pokemon').update({'current_xp': new_xp}).eq('id', pokemon['id']).execute()
-            
             await ctx.send(f"Você deu {amount} XP para **{pokemon['nickname']}**. XP Total agora: {new_xp}.")
-            
             pokemon['current_xp'] = new_xp
             await self.check_for_level_up(pokemon, ctx.channel)
         except Exception as e:
@@ -164,54 +145,51 @@ class EvolutionCog(commands.Cog):
 
     # --- COMANDOS DO JOGADOR ---
 
+    @commands.command(name='team', help='Mostra todos os seus Pokémon.')
+    async def team(self, ctx: commands.Context):
+        """Exibe a lista de Pokémon que o jogador possui."""
+        try:
+            response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).order('current_level', desc=True).execute()
+            if not response.data:
+                await ctx.send("Você ainda não capturou nenhum Pokémon!")
+                return
+
+            embed = discord.Embed(title=f"Equipe de {ctx.author.display_name}", color=discord.Color.teal())
+            embed.set_thumbnail(url=ctx.author.avatar.url)
+            for pokemon in response.data:
+                field_name = f"**{pokemon['nickname']}** ({pokemon['pokemon_api_name'].capitalize()})"
+                field_value = f"**Nível:** {pokemon['current_level']} | **XP:** {pokemon['current_xp']}"
+                embed.add_field(name=field_name, value=field_value, inline=False)
+            await ctx.send(embed=embed)
+        except Exception as e:
+            await ctx.send(f"Ocorreu um erro ao buscar sua equipe: {e}")
+
     @commands.command(name='shop', help='Mostra a loja de itens evolutivos.')
     async def shop(self, ctx: commands.Context):
-        """
-        Mostra uma loja 'hardcoded'. Os itens não vêm do banco de dados.
-        Esta é uma abordagem simples e eficaz para um conjunto fixo de itens como pedras evolutivas.
-        """
         embed = discord.Embed(title="🛒 Loja de Itens Evolutivos 🛒", color=discord.Color.blue())
         embed.description = "Aqui você pode comprar pedras para evoluir seus Pokémon instantaneamente!\nUse o comando `!buy \"Nome do Item\" <Nome do Pokémon>`."
-        
-        items = [
-            {"name": "Fire Stone", "price": 5000},
-            {"name": "Water Stone", "price": 5000},
-            {"name": "Thunder Stone", "price": 5000},
-            {"name": "Leaf Stone", "price": 5000},
-        ]
-
+        items = [{"name": "Fire Stone", "price": 5000}, {"name": "Water Stone", "price": 5000}, {"name": "Thunder Stone", "price": 5000}, {"name": "Leaf Stone", "price": 5000}]
         for item in items:
             embed.add_field(name=f"{item['name']} - `${item['price']}`", value="\u200b", inline=False)
-
         await ctx.send(embed=embed)
 
     @commands.command(name='buy', help='Compra um item evolutivo para um Pokémon.')
     async def buy(self, ctx: commands.Context, item_name: str, pokemon_name: str):
-        """
-        Simula a compra e o uso imediato de um item.
-        A lógica não verifica o dinheiro do jogador nem um inventário, ela apenas checa
-        se o item mencionado é o correto para evoluir o Pokémon alvo, segundo a PokéAPI.
-        """
         try:
             pokemon_response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_name).single().execute()
             pokemon = pokemon_response.data
-
             species_data = await pokeapi_service.get_pokemon_species_data(pokemon['pokemon_api_name'])
             evo_chain_url = species_data['evolution_chain']['url']
             evo_chain_data = await pokeapi_service.get_data_from_url(evo_chain_url)
             possible_evolutions = pokeapi_service.find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])
-
             found_match = False
             for evo in possible_evolutions:
                 details = evo['evolution_details'][0]
-                # Compara o item do !buy com o item necessário na API
                 if details['trigger']['name'] == 'use-item' and details['item']['name'] == item_name.lower().replace(' ', '-'):
                     new_form = evo['species']['name']
-                    # Se for válido, evolui. Uma versão futura poderia checar o dinheiro do jogador aqui.
                     await self.evolve_pokemon(ctx.author.id, pokemon['id'], new_form, ctx.channel)
                     found_match = True
                     break
-            
             if not found_match:
                 await ctx.send(f"O item **{item_name}** não parece ter efeito em **{pokemon_name}**.")
         except Exception:
