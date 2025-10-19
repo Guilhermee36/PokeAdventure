@@ -5,7 +5,8 @@ import os
 from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
-from utils import pokeapi_service # Importação correta do serviço
+# MUDANÇA 1: Importamos as funções diretamente do serviço da API
+from utils.pokeapi_service import get_pokemon_species_data, get_data_from_url, get_total_xp_for_level, find_evolution_details
 
 # (A classe EvolutionChoiceView continua a mesma)
 class EvolutionChoiceView(ui.View):
@@ -56,12 +57,13 @@ class EvolutionCog(commands.Cog):
 
     async def check_for_level_up(self, pokemon: dict, channel):
         """Verifica se um Pokémon tem XP suficiente para subir de nível."""
-        species_data = await pokeapi_service.get_pokemon_species_data(pokemon['pokemon_api_name'])
+        # MUDANÇA 2: Chamamos a função diretamente, sem o "pokeapi_service."
+        species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
         if not species_data: return
 
         growth_rate_url = species_data['growth_rate']['url']
         next_level = pokemon['current_level'] + 1
-        xp_needed = await pokeapi_service.get_total_xp_for_level(growth_rate_url, next_level)
+        xp_needed = await get_total_xp_for_level(growth_rate_url, next_level)
 
         # Loop para permitir múltiplos level ups de uma vez
         while pokemon['current_xp'] >= xp_needed:
@@ -73,21 +75,21 @@ class EvolutionCog(commands.Cog):
                 await self.check_evolution(pokemon, channel) # Verifica evolução a cada nível
                 
                 # Atualiza o xp_needed para o próximo nível
-                xp_needed = await pokeapi_service.get_total_xp_for_level(growth_rate_url, new_level + 1)
+                xp_needed = await get_total_xp_for_level(growth_rate_url, new_level + 1)
             except Exception as e:
                 print(f"Erro ao atualizar nível no DB: {e}")
                 break # Sai do loop se houver um erro
 
     async def check_evolution(self, pokemon: dict, channel):
         """Verifica as condições de evolução para um Pokémon após um level up."""
-        species_data = await pokeapi_service.get_pokemon_species_data(pokemon['pokemon_api_name'])
+        species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
         if not species_data or not species_data.get('evolution_chain'): return
 
         evo_chain_url = species_data['evolution_chain']['url']
-        evo_chain_data = await pokeapi_service.get_data_from_url(evo_chain_url)
+        evo_chain_data = await get_data_from_url(evo_chain_url)
         if not evo_chain_data: return
 
-        possible_evolutions = pokeapi_service.find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])
+        possible_evolutions = find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])
         if not possible_evolutions: return
 
         if len(possible_evolutions) > 1:
@@ -106,24 +108,21 @@ class EvolutionCog(commands.Cog):
         new_form = next_evo['species']['name']
         
         if trigger == 'level-up':
-             # A API pode retornar min_level como None, então tratamos esse caso
             min_level = evo_details.get('min_level')
             if min_level is not None and pokemon['current_level'] >= min_level:
                 await self.evolve_pokemon(pokemon['player_id'], pokemon['id'], new_form, channel)
     
-    # ========================================================================================
-    # ============================ COMANDOS PRINCIPAIS CORRIGIDOS ============================
-    # ========================================================================================
+    # ... (O resto dos comandos como !givexp, !team, !shop, !buy continuam os mesmos) ...
+    # A única diferença é que as chamadas internas para as funções da PokeAPI
+    # também foram ajustadas para não usar mais o prefixo "pokeapi_service."
 
     @commands.command(name='givexp', help='(Admin) Dá XP para um dos seus Pokémon.')
     @commands.is_owner()
     async def give_xp(self, ctx: commands.Context, amount: int, *, pokemon_nickname: str):
         """Dá uma quantidade de XP para um Pokémon específico do jogador."""
         try:
-            # MUDANÇA 1: Usamos .execute() em vez de .single() para obter uma lista
             response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_nickname).execute()
 
-            # MUDANÇA 2: Tratamos os casos de erro de forma específica
             if not response.data:
                 await ctx.send(f"Não encontrei nenhum Pokémon com o nome `{pokemon_nickname}`.")
                 return
@@ -131,7 +130,6 @@ class EvolutionCog(commands.Cog):
                 await ctx.send(f"Encontrei vários Pokémon com o nome `{pokemon_nickname}`. Por favor, use um apelido único.")
                 return
 
-            # Se tudo deu certo, pegamos o único resultado
             pokemon = response.data[0]
             
             new_xp = pokemon['current_xp'] + amount
@@ -181,13 +179,9 @@ class EvolutionCog(commands.Cog):
     @commands.command(name='buy', help='Compra um item evolutivo para um Pokémon.')
     async def buy(self, ctx: commands.Context, item_name: str, *, pokemon_name: str):
         """Simula a compra e o uso imediato de um item para evolução."""
-        # MUDANÇA 1: O '*' antes de `pokemon_name` captura todo o resto da mensagem,
-        # permitindo nomes com espaços, como "Meu Pikachu".
         try:
-            # MUDANÇA 2: Usamos .execute() em vez de .single()
             pokemon_response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_name.strip()).execute()
 
-            # MUDANÇA 3: Tratamos os erros de forma específica
             if not pokemon_response.data:
                 await ctx.send(f"Não encontrei um Pokémon chamado `{pokemon_name}` na sua equipe.")
                 return
@@ -197,11 +191,10 @@ class EvolutionCog(commands.Cog):
 
             pokemon = pokemon_response.data[0]
             
-            # A lógica da PokéAPI continua a mesma
-            species_data = await pokeapi_service.get_pokemon_species_data(pokemon['pokemon_api_name'])
+            species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
             evo_chain_url = species_data['evolution_chain']['url']
-            evo_chain_data = await pokeapi_service.get_data_from_url(evo_chain_url)
-            possible_evolutions = pokeapi_service.find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])
+            evo_chain_data = await get_data_from_url(evo_chain_url)
+            possible_evolutions = find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])
             found_match = False
             for evo in possible_evolutions:
                 details = evo['evolution_details'][0]

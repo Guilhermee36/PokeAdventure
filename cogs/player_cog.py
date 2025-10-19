@@ -7,6 +7,7 @@ from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
 from utils import pokeapi_service # Importação do nosso serviço da PokeAPI
+from utils.pokeapi_service import get_pokemon_species_data, get_data_from_url, get_total_xp_for_level, find_evolution_details
 
 # ========= CLASSES DE UI (BOTÕES E MODALS) =========
 
@@ -155,45 +156,38 @@ class PlayerCog(commands.Cog):
     # =====================================================================================
 
     @commands.command(name='addpokemon', help='(Admin) Adiciona um Pokémon à sua equipe.')
-    @commands.is_owner() # Garante que só o dono do bot possa usar este comando para testes
+    @commands.is_owner()
     async def add_pokemon(self, ctx: commands.Context, *, pokemon_name: str):
         """
         Adiciona um novo Pokémon à equipe do jogador.
         Este comando busca os dados na PokeAPI e insere no banco de dados.
         """
         try:
-            # 1. VERIFICA SE O JOGADOR EXISTE
             if not await self.player_exists(ctx.author.id):
                 await ctx.send(f"Você precisa iniciar sua jornada primeiro! Use `!start`.")
                 return
 
             pokemon_name_clean = pokemon_name.strip().lower()
 
-            # 2. BUSCA DADOS NA POKEAPI
-            pokemon_data = await pokeapi_service.get_pokemon_data(pokemon_name_clean)
+            # MUDANÇA: Chamamos a função diretamente, sem o "pokeapi_service."
+            pokemon_data = await get_pokemon_species_data(pokemon_name_clean)
             if not pokemon_data:
                 await ctx.send(f"Não consegui encontrar um Pokémon chamado `{pokemon_name}`. Verifique o nome e tente novamente.")
                 return
 
-            # 3. EXTRAI O HP BASE PARA DEFINIR O HP ATUAL INICIAL
-            # Usamos 'next' para encontrar o HP de forma segura na lista de stats
-            base_hp = next((stat['base_stat'] for stat in pokemon_data['stats'] if stat['stat']['name'] == 'hp'), 30) # 30 como fallback
+            base_hp = next((stat['base_stat'] for stat in pokemon_data['stats'] if stat['stat']['name'] == 'hp'), 30)
 
-            # 4. PREPARA OS DADOS PARA O BANCO
             new_pokemon_entry = {
                 'player_id': ctx.author.id,
                 'pokemon_api_name': pokemon_name_clean,
                 'nickname': pokemon_name_clean.capitalize(),
-                'current_level': 5,  # Nível inicial padrão
+                'current_level': 5,
                 'current_xp': 0,
                 'current_hp': base_hp,
-                # Adicione outros campos com valores padrão se sua tabela tiver mais colunas
             }
 
-            # 5. INSERE NO BANCO DE DADOS
             response = self.supabase.table('player_pokemon').insert(new_pokemon_entry).execute()
 
-            # Verificação de erro na inserção (opcional, mas recomendado)
             if not response.data:
                  await ctx.send("Ocorreu um erro ao tentar adicionar o Pokémon ao banco de dados.")
                  print(f"Erro na inserção do Supabase: {response}")
