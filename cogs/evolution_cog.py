@@ -214,5 +214,5 @@ class EvolutionCog(commands.Cog):
             await ctx.send(f"Ocorreu um erro inesperado no comando !buy.")
             print(f"Erro no comando !buy: {e}")
 
-async def setup(bot: commands.eBot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(EvolutionCog(bot))
