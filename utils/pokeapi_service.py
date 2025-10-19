@@ -1,6 +1,7 @@
 # utils/pokeapi_service.py
 
 import aiohttp
+import math
 
 # Cache manual para armazenar os RESULTADOS (JSON), não as corrotinas.
 # A chave será a URL completa para garantir que cada endpoint seja único.
@@ -11,26 +12,21 @@ async def get_data_from_url(url: str):
     """
     Função genérica para buscar dados de qualquer URL da PokeAPI, usando nosso cache manual.
     """
-    # 1. Verifica se o resultado para esta URL já está no cache.
     if url in api_cache:
         return api_cache[url]
 
-    # 2. Se não estiver no cache, faz a requisição HTTP.
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             if response.status == 200:
                 data = await response.json()
-                # 3. Armazena o resultado (o dicionário JSON) no cache.
                 api_cache[url] = data
                 return data
-            # Retorna None se a API der erro (ex: Pokémon não encontrado).
             return None
 
 async def get_pokemon_data(pokemon_name_or_id: str):
     """
-    Busca dados de BATALHA de um Pokémon (stats, types, etc.).
+    Busca dados de BATALHA de um Pokémon (stats, types, moves, etc.).
     Endpoint: /pokemon/{id}
-    Usado por: !addpokemon
     """
     url = f"{BASE_URL}/pokemon/{str(pokemon_name_or_id).lower()}"
     return await get_data_from_url(url)
@@ -39,7 +35,6 @@ async def get_pokemon_species_data(pokemon_name_or_id: str):
     """
     Busca dados de ESPÉCIE de um Pokémon (growth_rate, evolution_chain).
     Endpoint: /pokemon-species/{id}
-    Usado por: !givexp (level up e evolução)
     """
     url = f"{BASE_URL}/pokemon-species/{str(pokemon_name_or_id).lower()}"
     return await get_data_from_url(url)
@@ -70,3 +65,40 @@ def find_evolution_details(chain: dict, current_pokemon_name: str) -> list | Non
             return result
             
     return None
+
+# --- NOVA FUNÇÃO DE LÓGICA DE JOGO PARA CÁLCULO DE STATS ---
+def calculate_stats_for_level(base_stats: list, level: int) -> dict:
+    """
+    Calcula os stats de um Pokémon para um nível específico usando uma fórmula simplificada.
+    base_stats: A lista de 'stats' vinda diretamente da PokeAPI.
+    level: O nível atual do Pokémon.
+    """
+    stats = {}
+    
+    stat_name_map = {
+        "hp": "max_hp",
+        "attack": "attack",
+        "defense": "defense",
+        "special-attack": "special_attack",
+        "special-defense": "special_defense",
+        "speed": "speed"
+    }
+
+    for stat_info in base_stats:
+        base_value = stat_info['base_stat']
+        stat_name_api = stat_info['stat']['name']
+        
+        db_col_name = stat_name_map.get(stat_name_api)
+        if not db_col_name:
+            continue
+
+        if stat_name_api == 'hp':
+            # Fórmula do HP: floor( ( (2 * Base * Level) / 100 ) + Level + 10 )
+            calculated_value = math.floor(((2 * base_value * level) / 100) + level + 10)
+        else:
+            # Fórmula para outros stats: floor( ( (2 * Base * Level) / 100 ) + 5 )
+            calculated_value = math.floor(((2 * base_value * level) / 100) + 5)
+        
+        stats[db_col_name] = calculated_value
+        
+    return stats
