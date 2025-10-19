@@ -6,14 +6,16 @@ from functools import lru_cache
 BASE_URL = "https://pokeapi.co/api/v2"
 
 @lru_cache(maxsize=128)
-async def get_pokemon_species_data(pokemon_name: str) -> dict:
-    """Busca dados da espécie de um Pokémon (contém growth_rate e evolution_chain_url)."""
+async def get_pokemon_data(pokemon_name: str) -> dict:
+    """Busca os dados principais de um Pokémon (stats, tipos, etc.)."""
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{BASE_URL}/pokemon-species/{pokemon_name.lower()}")
+            # Usamos o endpoint /pokemon/ em vez de /pokemon-species/
+            response = await client.get(f"{BASE_URL}/pokemon/{pokemon_name.lower()}")
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError:
+            print(f"Erro: Pokémon '{pokemon_name}' não encontrado na PokeAPI.")
             return None
 
 @lru_cache(maxsize=32)
