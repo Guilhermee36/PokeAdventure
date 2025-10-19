@@ -5,8 +5,8 @@ import os
 from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
-# MUDANÇA 1: Importamos as funções diretamente do serviço da API
-from utils.pokeapi_service import get_pokemon_data, get_data_from_url, get_total_xp_for_level, find_evolution_details
+# MUDANÇA: Importamos a função correta ('get_pokemon_species_data') para dados de evolução e level up.
+from utils.pokeapi_service import get_pokemon_species_data, get_data_from_url, get_total_xp_for_level, find_evolution_details
 
 # (A classe EvolutionChoiceView continua a mesma)
 class EvolutionChoiceView(ui.View):
@@ -57,8 +57,8 @@ class EvolutionCog(commands.Cog):
 
     async def check_for_level_up(self, pokemon: dict, channel):
         """Verifica se um Pokémon tem XP suficiente para subir de nível."""
-        # MUDANÇA 2: Chamamos a função diretamente, sem o "pokeapi_service."
-        species_data = await get_pokemon_data(pokemon['pokemon_api_name'])
+        # CORREÇÃO: Usamos a função que busca a "species", que contém o 'growth_rate'
+        species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
         if not species_data: return
 
         growth_rate_url = species_data['growth_rate']['url']
@@ -82,7 +82,8 @@ class EvolutionCog(commands.Cog):
 
     async def check_evolution(self, pokemon: dict, channel):
         """Verifica as condições de evolução para um Pokémon após um level up."""
-        species_data = await get_pokemon_data(pokemon['pokemon_api_name'])
+        # CORREÇÃO: Usamos a mesma função aqui para obter a 'evolution_chain'
+        species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
         if not species_data or not species_data.get('evolution_chain'): return
 
         evo_chain_url = species_data['evolution_chain']['url']
@@ -112,10 +113,6 @@ class EvolutionCog(commands.Cog):
             if min_level is not None and pokemon['current_level'] >= min_level:
                 await self.evolve_pokemon(pokemon['player_id'], pokemon['id'], new_form, channel)
     
-    # ... (O resto dos comandos como !givexp, !team, !shop, !buy continuam os mesmos) ...
-    # A única diferença é que as chamadas internas para as funções da PokeAPI
-    # também foram ajustadas para não usar mais o prefixo "pokeapi_service."
-
     @commands.command(name='givexp', help='(Admin) Dá XP para um dos seus Pokémon.')
     @commands.is_owner()
     async def give_xp(self, ctx: commands.Context, amount: int, *, pokemon_nickname: str):
@@ -191,15 +188,22 @@ class EvolutionCog(commands.Cog):
 
             pokemon = pokemon_response.data[0]
             
-            species_data = await get_pokemon_data(pokemon['pokemon_api_name'])
+            # CORREÇÃO: O comando !buy também precisa da cadeia de evolução para funcionar.
+            species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
+            if not species_data or not species_data.get('evolution_chain'):
+                await ctx.send(f"**{pokemon_name}** não parece poder evoluir com itens.")
+                return
+
             evo_chain_url = species_data['evolution_chain']['url']
             evo_chain_data = await get_data_from_url(evo_chain_url)
             possible_evolutions = find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])
+            
             found_match = False
             for evo in possible_evolutions:
                 details = evo['evolution_details'][0]
-                if details['trigger']['name'] == 'use-item' and details['item']['name'] == item_name.lower().replace(' ', '-'):
+                if details['trigger']['name'] == 'use-item' and details.get('item') and details['item']['name'] == item_name.lower().replace(' ', '-'):
                     new_form = evo['species']['name']
+                    # Adicione aqui a lógica de custo do item se desejar.
                     await self.evolve_pokemon(ctx.author.id, pokemon['id'], new_form, ctx.channel)
                     found_match = True
                     break
@@ -210,5 +214,5 @@ class EvolutionCog(commands.Cog):
             await ctx.send(f"Ocorreu um erro inesperado no comando !buy.")
             print(f"Erro no comando !buy: {e}")
 
-async def setup(bot: commands.Bot):
+async def setup(bot: commands.eBot):
     await bot.add_cog(EvolutionCog(bot))
