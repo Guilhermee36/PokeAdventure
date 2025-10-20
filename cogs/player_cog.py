@@ -6,7 +6,13 @@ import aiohttp
 from supabase import create_client, Client
 import os
 
-# --- Helper Functions (Sem alterações) ---
+# =================================================================
+# ALTERAÇÃO 1: Reimportando a função de buscar ataques
+# Assumindo que este arquivo e a função existem no seu projeto.
+# from utils.pokeapi_service import get_initial_moves 
+# =================================================================
+
+# --- Helper Functions ---
 
 async def fetch_pokemon_data(pokemon_name: str):
     """Busca dados de um Pokémon da PokeAPI."""
@@ -23,8 +29,24 @@ def get_supabase_client():
     key: str = os.environ.get("SUPABASE_KEY")
     return create_client(url, key)
 
+# MOCKUP da função, caso você não tenha o arquivo utils pronto.
+# Substitua isso pelo seu import real.
+def get_initial_moves(pokemon_data, level):
+    """Mockup: Pega os 4 primeiros ataques aprendidos até o nível 5."""
+    moves = []
+    for move_data in pokemon_data['moves']:
+        for version_group in move_data['version_group_details']:
+            if version_group['move_learn_method']['name'] == 'level-up' and version_group['level_learned_at'] <= level and version_group['level_learned_at'] > 0:
+                moves.append(move_data['move']['name'])
+                if len(moves) >= 4:
+                    return list(set(moves)) # Remove duplicatas e retorna
+    return list(set(moves)) if moves else ["tackle"] # Garante que tenha pelo menos um ataque
+
+# =================================================================
+# ALTERAÇÃO 2: Atualizando a função central para incluir os ataques
+# =================================================================
 async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: int = 5, captured_at: str = "Início da Jornada") -> dict:
-    """Função centralizada para adicionar um Pokémon a um jogador com posição incremental."""
+    """Função centralizada que agora também adiciona os ataques iniciais."""
     supabase = get_supabase_client()
     try:
         count_response = supabase.table("player_pokemon").select("id", count='exact').eq("player_id", player_id).execute()
@@ -39,12 +61,26 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
     if not poke_data:
         return {'success': False, 'error': f"Pokémon '{pokemon_api_name}' não encontrado na API."}
     
+    # Lógica para HP, Shiny, Posição...
     base_hp = poke_data['stats'][0]['base_stat']
     current_hp = int((2 * base_hp * level) / 100) + level + 10
     is_shiny = random.randint(1, 100) == 1
     party_position = pokemon_count + 1
+    
+    # >>> BUSCA E ADICIONA OS ATAQUES AQUI <<<
+    initial_moves = get_initial_moves(poke_data, level)
 
-    new_pokemon_data = { "player_id": player_id, "pokemon_api_name": pokemon_api_name, "captured_at_location": captured_at, "is_shiny": is_shiny, "party_position": party_position, "current_level": level, "current_hp": current_hp, "current_xp": 0 }
+    new_pokemon_data = { 
+        "player_id": player_id, 
+        "pokemon_api_name": pokemon_api_name, 
+        "captured_at_location": captured_at, 
+        "is_shiny": is_shiny, 
+        "party_position": party_position, 
+        "current_level": level, 
+        "current_hp": current_hp, 
+        "current_xp": 0,
+        "moves": initial_moves # Adiciona a lista de ataques ao registro
+    }
     
     try:
         insert_response = supabase.table("player_pokemon").insert(new_pokemon_data).execute()
@@ -55,7 +91,7 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
     except Exception as e:
         return {'success': False, 'error': f"Erro no banco de dados: {e}"}
 
-# --- Classes de UI ---
+# --- Classes de UI (O restante do código permanece o mesmo) ---
 
 class StartJourneyView(ui.View):
     def __init__(self, supabase_client: Client):
@@ -78,10 +114,6 @@ class TrainerNameModal(ui.Modal, title="Crie seu Personagem"):
         embed = discord.Embed(title="Escolha sua Região Inicial", description=f"Ótimo nome, **{trainer_name}**! Agora, escolha a região onde sua aventura vai começar.", color=discord.Color.blue())
         await interaction.response.send_message(embed=embed, view=RegionSelectView(trainer_name=trainer_name, supabase_client=self.supabase), ephemeral=True)
 
-
-# =================================================================
-# ALTERAÇÃO 1: Adicionando a StarterSelectView
-# =================================================================
 class StarterSelectView(ui.View):
     def __init__(self, region: str):
         super().__init__(timeout=180)
@@ -93,7 +125,6 @@ class StarterSelectView(ui.View):
             "Alola": ["rowlet", "litten", "popplio"], "Galar": ["grookey", "scorbunny", "sobble"],
             "Paldea": ["sprigatito", "fuecoco", "quaxly"]
         }
-        # Adiciona botões para cada inicial da região escolhida
         for starter in starters.get(region, []):
             button = ui.Button(label=starter.capitalize(), style=discord.ButtonStyle.primary, custom_id=starter)
             button.callback = self.select_starter
@@ -101,39 +132,22 @@ class StarterSelectView(ui.View):
 
     async def select_starter(self, interaction: discord.Interaction):
         starter_name = interaction.data['custom_id']
-        
-        for item in self.children:
-            item.disabled = True
+        for item in self.children: item.disabled = True
         await interaction.response.edit_message(view=self)
-
-        result = await add_pokemon_to_player(
-            player_id=interaction.user.id,
-            pokemon_api_name=starter_name,
-            level=5,
-            captured_at=f"Recebido em {self.region}"
-        )
-        
+        result = await add_pokemon_to_player(player_id=interaction.user.id, pokemon_api_name=starter_name, level=5, captured_at=f"Recebido em {self.region}")
         if result['success']:
             pokemon_data = result['data']
             is_shiny = pokemon_data.get('is_shiny', False)
             shiny_text = "\n\n✨ **UAU, ELE É SHINY! QUE SORTE!** ✨" if is_shiny else ""
-            
-            # Envia uma mensagem pública para celebrar a escolha
-            public_embed = discord.Embed(
-                title="Uma Nova Jornada Começa!",
-                description=f"{interaction.user.mention} iniciou sua aventura e escolheu **{starter_name.capitalize()}** como seu primeiro parceiro!{shiny_text}",
-                color=discord.Color.green()
-            )
+            public_embed = discord.Embed(title="Uma Nova Jornada Começa!", description=f"{interaction.user.mention} iniciou sua aventura e escolheu **{starter_name.capitalize()}** como seu primeiro parceiro!{shiny_text}", color=discord.Color.green())
             poke_api_data = await fetch_pokemon_data(starter_name)
             if poke_api_data:
                 sprite_url = poke_api_data['sprites']['front_shiny'] if is_shiny else poke_api_data['sprites']['front_default']
                 public_embed.set_thumbnail(url=sprite_url)
-            
-            await interaction.followup.send(embed=public_embed) # Envia para o canal
+            await interaction.followup.send(embed=public_embed)
         else:
             await interaction.followup.send(f"Ocorreu um erro ao adicionar seu Pokémon: {result['error']}", ephemeral=True)
         self.stop()
-
 
 class RegionSelectView(ui.View):
     def __init__(self, trainer_name: str, supabase_client: Client):
@@ -142,21 +156,14 @@ class RegionSelectView(ui.View):
         self.supabase = supabase_client
 
     async def select_region(self, interaction: discord.Interaction, region: str):
-        for item in self.children: 
-            item.disabled = True
+        for item in self.children: item.disabled = True
         await interaction.response.edit_message(view=self)
-
         discord_id = interaction.user.id
         player_data = {'discord_id': discord_id, 'trainer_name': self.trainer_name, 'current_region': region}
-        
         try:
             self.supabase.table('players').insert(player_data).execute()
-            # =================================================================
-            # ALTERAÇÃO 2: Chamando a StarterSelectView após criar o jogador
-            # =================================================================
             starter_embed = discord.Embed(title=f"Bem-vindo(a) a {region}!", description="Agora, a escolha mais importante: quem será seu parceiro inicial?", color=discord.Color.blue())
             await interaction.followup.send(embed=starter_embed, view=StarterSelectView(region=region), ephemeral=True)
-
         except Exception as e:
             await interaction.followup.send(f"Ocorreu um erro ao salvar seus dados: {e}", ephemeral=True)
         self.stop()
@@ -203,7 +210,7 @@ class ConfirmDeleteView(ui.View):
         await interaction.followup.send("Ação cancelada. Sua jornada continua!", ephemeral=True)
         self.stop()
 
-# --- Cog Class (Sem alterações) ---
+# --- Cog Class ---
 
 class PlayerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
