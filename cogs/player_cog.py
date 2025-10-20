@@ -74,17 +74,41 @@ class RegionSelectView(ui.View):
         starter_view = StarterSelectView(region, self.supabase, self.player_cog)
         await interaction.response.send_message(f"Você escolheu a região de **{region}**! Agora, escolha seu parceiro inicial:", view=starter_view, ephemeral=True)
 
-    @ui.button(label="Kanto", style=discord.ButtonStyle.secondary, emoji="🌿")
+    @ui.button(label="Kanto", style=discord.ButtonStyle.secondary, emoji="1️⃣")
     async def kanto_button(self, interaction: discord.Interaction, button: ui.Button):
         await self.show_starters(interaction, "Kanto")
 
-    @ui.button(label="Johto", style=discord.ButtonStyle.secondary, emoji="🌊")
+    @ui.button(label="Johto", style=discord.ButtonStyle.secondary, emoji="2️⃣")
     async def johto_button(self, interaction: discord.Interaction, button: ui.Button):
         await self.show_starters(interaction, "Johto")
         
-    @ui.button(label="Hoenn", style=discord.ButtonStyle.secondary, emoji="🌋")
+    @ui.button(label="Hoenn", style=discord.ButtonStyle.secondary, emoji="3️⃣")
     async def hoenn_button(self, interaction: discord.Interaction, button: ui.Button):
         await self.show_starters(interaction, "Hoenn")
+        
+        @ui.button(label="Kanto", style=discord.ButtonStyle.secondary, emoji="4️⃣")
+    async def kanto_button(self, interaction: discord.Interaction, button: ui.Button):
+        await self.show_starters(interaction, "Sinnoh")
+
+    @ui.button(label="Johto", style=discord.ButtonStyle.secondary, emoji="5️⃣")
+    async def johto_button(self, interaction: discord.Interaction, button: ui.Button):
+        await self.show_starters(interaction, "Unova")
+        
+    @ui.button(label="Hoenn", style=discord.ButtonStyle.secondary, emoji="6️⃣")
+    async def hoenn_button(self, interaction: discord.Interaction, button: ui.Button):
+        await self.show_starters(interaction, "Kalos")
+        
+        @ui.button(label="Kanto", style=discord.ButtonStyle.secondary, emoji="7️⃣")
+    async def kanto_button(self, interaction: discord.Interaction, button: ui.Button):
+        await self.show_starters(interaction, "Alola")
+
+    @ui.button(label="Johto", style=discord.ButtonStyle.secondary, emoji="8️⃣")
+    async def johto_button(self, interaction: discord.Interaction, button: ui.Button):
+        await self.show_starters(interaction, "Galar")
+        
+    @ui.button(label="Hoenn", style=discord.ButtonStyle.secondary, emoji="9️⃣")
+    async def hoenn_button(self, interaction: discord.Interaction, button: ui.Button):
+        await self.show_starters(interaction, "Paldea")
 
 # ========= CLASSES DE UI EXISTENTES (MODIFICADAS) =========
 
