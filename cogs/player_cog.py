@@ -6,7 +6,7 @@ import aiohttp
 from supabase import create_client, Client
 import os
 
-# --- Helper Functions (Idealmente, mova para um arquivo utils.py no futuro) ---
+# --- Helper Functions (Sem alterações) ---
 
 async def fetch_pokemon_data(pokemon_name: str):
     """Busca dados de um Pokémon da PokeAPI."""
@@ -23,7 +23,7 @@ def get_supabase_client():
     key: str = os.environ.get("SUPABASE_KEY")
     return create_client(url, key)
 
-# --- Core Pokémon Logic ---
+# --- Core Pokémon Logic (Sem alterações) ---
 
 async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: int = 5, captured_at: str = "Início da Jornada") -> dict:
     """
@@ -33,33 +33,25 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
     """
     supabase = get_supabase_client()
     
-    # 1. Verificar a quantidade de Pokémon que o jogador já tem
     try:
         count_response = supabase.table("player_pokemon").select("id", count='exact').eq("player_id", player_id).execute()
         pokemon_count = count_response.count
     except Exception as e:
         return {'success': False, 'error': f"Erro ao contar Pokémon: {e}"}
 
-    # 2. Impedir adição se o time estiver cheio (6 Pokémon)
     if pokemon_count >= 6:
         return {'success': False, 'error': "Seu time já está cheio! Você não pode carregar mais de 6 Pokémon."}
         
-    # 3. Buscar dados da PokeAPI para o HP base
     poke_data = await fetch_pokemon_data(pokemon_api_name)
     if not poke_data:
         return {'success': False, 'error': f"Pokémon '{pokemon_api_name}' não encontrado na API."}
     
     base_hp = poke_data['stats'][0]['base_stat']
-    # Fórmula simples para HP inicial, pode ser aprimorada depois
     current_hp = int((2 * base_hp * level) / 100) + level + 10
 
-    # 4. Calcular chance de ser shiny (1 em 100, ou 1%)
     is_shiny = random.randint(1, 100) == 1
-    
-    # 5. Determinar a posição no time
     party_position = pokemon_count + 1
 
-    # 6. Montar e inserir os dados no banco
     new_pokemon_data = {
         "player_id": player_id,
         "pokemon_api_name": pokemon_api_name,
@@ -95,7 +87,6 @@ class TrainerNameModal(discord.ui.Modal, title="Nome de Treinador"):
         supabase = get_supabase_client()
         player_id = interaction.user.id
         
-        # Cria o jogador na tabela 'players'
         try:
             supabase.table("players").insert({
                 "discord_id": player_id,
@@ -112,6 +103,9 @@ class TrainerNameModal(discord.ui.Modal, title="Nome de Treinador"):
             ephemeral=True
         )
 
+# =================================================================
+# ALTERAÇÃO 1: Dicionário de starters expandido para 9 gerações
+# =================================================================
 class StarterSelectView(discord.ui.View):
     def __init__(self, region: str):
         super().__init__(timeout=180)
@@ -119,7 +113,13 @@ class StarterSelectView(discord.ui.View):
         starters = {
             "Kanto": ["bulbasaur", "charmander", "squirtle"],
             "Johto": ["chikorita", "cyndaquil", "totodile"],
-            "Hoenn": ["treecko", "torchic", "mudkip"]
+            "Hoenn": ["treecko", "torchic", "mudkip"],
+            "Sinnoh": ["turtwig", "chimchar", "piplup"],
+            "Unova": ["snivy", "tepig", "oshawott"],
+            "Kalos": ["chespin", "fennekin", "froakie"],
+            "Alola": ["rowlet", "litten", "popplio"],
+            "Galar": ["grookey", "scorbunny", "sobble"],
+            "Paldea": ["sprigatito", "fuecoco", "quaxly"]
         }
         
         for starter in starters.get(region, []):
@@ -129,14 +129,12 @@ class StarterSelectView(discord.ui.View):
 
     async def select_starter(self, interaction: discord.Interaction):
         starter_name = interaction.data['custom_id']
-        await interaction.response.defer(ephemeral=True) # Confirma o recebimento da interação
+        await interaction.response.defer(ephemeral=True) 
 
-        # Desativa todos os botões para impedir nova escolha
         for item in self.children:
             item.disabled = True
         await interaction.edit_original_response(view=self)
 
-        # Chama a função central para adicionar o Pokémon
         result = await add_pokemon_to_player(
             player_id=interaction.user.id,
             pokemon_api_name=starter_name,
@@ -155,7 +153,6 @@ class StarterSelectView(discord.ui.View):
                 description=f"Parabéns! Você escolheu **{starter_name.capitalize()}** para iniciar sua jornada!\n{shiny_text}",
                 color=discord.Color.green()
             )
-            # Fetch sprite para o embed
             poke_data = await fetch_pokemon_data(starter_name)
             if poke_data:
                 sprite_url = poke_data['sprites']['front_default']
@@ -163,47 +160,60 @@ class StarterSelectView(discord.ui.View):
                     sprite_url = poke_data['sprites']['front_shiny']
                 embed.set_thumbnail(url=sprite_url)
 
-            await interaction.followup.send(embed=embed, ephemeral=False) # Envia para o canal
+            await interaction.followup.send(embed=embed, ephemeral=False)
         else:
             await interaction.followup.send(f"Ocorreu um erro: {result['error']}", ephemeral=True)
 
-
+# =================================================================
+# ALTERAÇÃO 2: RegionSelectView agora usa um menu dropdown (Select)
+# =================================================================
 class RegionSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=180)
 
-    @discord.ui.button(label="Kanto", style=discord.ButtonStyle.success)
-    async def kanto_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = StarterSelectView(region="Kanto")
-        await interaction.response.send_message("Você escolheu Kanto! Quem será seu parceiro?", view=view, ephemeral=True)
+    @discord.ui.select(
+        placeholder="Escolha sua região inicial...",
+        options=[
+            discord.SelectOption(label="Kanto", description="Geração 1 - Bulbasaur, Charmander, Squirtle"),
+            discord.SelectOption(label="Johto", description="Geração 2 - Chikorita, Cyndaquil, Totodile"),
+            discord.SelectOption(label="Hoenn", description="Geração 3 - Treecko, Torchic, Mudkip"),
+            discord.SelectOption(label="Sinnoh", description="Geração 4 - Turtwig, Chimchar, Piplup"),
+            discord.SelectOption(label="Unova", description="Geração 5 - Snivy, Tepig, Oshawott"),
+            discord.SelectOption(label="Kalos", description="Geração 6 - Chespin, Fennekin, Froakie"),
+            discord.SelectOption(label="Alola", description="Geração 7 - Rowlet, Litten, Popplio"),
+            discord.SelectOption(label="Galar", description="Geração 8 - Grookey, Scorbunny, Sobble"),
+            discord.SelectOption(label="Paldea", description="Geração 9 - Sprigatito, Fuecoco, Quaxly"),
+        ]
+    )
+    async def select_region_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+        selected_region = select.values[0]
 
-    @discord.ui.button(label="Johto", style=discord.ButtonStyle.danger)
-    async def johto_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = StarterSelectView(region="Johto")
-        await interaction.response.send_message("Você escolheu Johto! Quem será seu parceiro?", view=view, ephemeral=True)
+        # Desativa o menu para evitar que o usuário clique de novo
+        select.disabled = True
+        await interaction.message.edit(view=self)
         
-    @discord.ui.button(label="Hoenn", style=discord.ButtonStyle.primary)
-    async def hoenn_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = StarterSelectView(region="Hoenn")
-        await interaction.response.send_message("Você escolheu Hoenn! Quem será seu parceiro?", view=view, ephemeral=True)
+        # Envia a próxima View com os starters da região escolhida
+        view = StarterSelectView(region=selected_region)
+        await interaction.response.send_message(f"Você escolheu **{selected_region}**! Agora, escolha seu parceiro de jornada:", view=view, ephemeral=True)
+
 
 class StartJourneyView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None) # Botão persistente se necessário
+        super().__init__(timeout=None)
 
     @discord.ui.button(label="Iniciar Jornada", style=discord.ButtonStyle.primary, custom_id="start_journey_button")
     async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         supabase = get_supabase_client()
         player_id = interaction.user.id
         
-        # Verifica se o jogador já existe
         result = supabase.table("players").select("discord_id").eq("discord_id", player_id).execute()
         if result.data:
             await interaction.response.send_message("Você já iniciou sua jornada!", ephemeral=True)
         else:
             await interaction.response.send_modal(TrainerNameModal())
 
-# --- Cog Class ---
+
+# --- Cog Class (Sem alterações) ---
 
 class PlayerCog(commands.Cog):
     def __init__(self, bot):
@@ -211,7 +221,6 @@ class PlayerCog(commands.Cog):
 
     @commands.command(name="start")
     async def start(self, ctx: commands.Context):
-        """Inicia a jornada de um novo treinador."""
         view = StartJourneyView()
         embed = discord.Embed(
             title="Bem-vindo ao Mundo Pokémon!",
@@ -220,15 +229,33 @@ class PlayerCog(commands.Cog):
         )
         await ctx.send(embed=embed, view=view)
 
-    @commands.command(name="addpokemon")
-    @commands.is_owner() # Comando apenas para o dono do bot
-    async def add_pokemon(self, ctx: commands.Context, pokemon_name: str, level: int = 5):
-        """(Admin) Adiciona um pokémon ao time do jogador com posição incremental."""
-        player_id = ctx.author.id
+    @commands.command(name="help")
+    async def help_command(self, ctx: commands.Context):
+        embed = discord.Embed(
+            title="Guia de Comandos - PokeAdventure",
+            description="Aqui estão os comandos que você pode usar:",
+            color=discord.Color.orange()
+        )
+        embed.add_field(name="`!start`", value="Inicia sua jornada como um novo treinador Pokémon.", inline=False)
+        embed.add_field(name="`!team`", value="Mostra seu time atual de Pokémon (em breve com nova UI!).", inline=False)
+        embed.add_field(name="`!help`", value="Exibe esta mensagem de ajuda.", inline=False)
         
-        # Apenas chama a função central
+        if await self.bot.is_owner(ctx.author):
+            embed.add_field(
+                name="--- Comandos de Administrador ---",
+                value="Apenas o dono do bot pode usar estes comandos.",
+                inline=False
+            )
+            embed.add_field(name="`!addpokemon <nome> [level]`", value="Adiciona um Pokémon ao seu time.", inline=False)
+            embed.add_field(name="`!delete <@membro>`", value="APAGA TODOS os dados de um jogador para testes.", inline=False)
+
+        await ctx.send(embed=embed)
+
+    @commands.command(name="addpokemon")
+    @commands.is_owner()
+    async def add_pokemon(self, ctx: commands.Context, pokemon_name: str, level: int = 5):
         result = await add_pokemon_to_player(
-            player_id=player_id,
+            player_id=ctx.author.id,
             pokemon_api_name=pokemon_name,
             level=level,
             captured_at="Comando de Admin"
@@ -238,6 +265,26 @@ class PlayerCog(commands.Cog):
             await ctx.send(f"✅ {pokemon_name.capitalize()} foi adicionado ao seu time! {result['message']}")
         else:
             await ctx.send(f"❌ Erro: {result['error']}")
+
+    @commands.command(name="delete")
+    @commands.is_owner()
+    async def delete_player_data(self, ctx: commands.Context, member: discord.Member):
+        supabase = get_supabase_client()
+        player_id = member.id
+
+        await ctx.send(f"⚠️ **Atenção!** Você está prestes a deletar **TODOS** os dados de `{member.display_name}`. Isso é irreversível.\nProcessando...")
+
+        try:
+            delete_response = supabase.table("players").delete().eq("discord_id", player_id).execute()
+
+            if delete_response.data:
+                await ctx.send(f"✅ Dados do jogador `{member.display_name}` foram apagados com sucesso.")
+            else:
+                await ctx.send(f"🔎 O jogador `{member.display_name}` não foi encontrado no banco de dados.")
+
+        except Exception as e:
+            await ctx.send(f"❌ Ocorreu um erro ao tentar deletar os dados: {e}")
+
 
 async def setup(bot):
     await bot.add_cog(PlayerCog(bot))
