@@ -35,7 +35,7 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
     if pokemon_count >= 6:
         return {'success': False, 'error': "Seu time já está cheio! Você não pode carregar mais de 6 Pokémon."}
         
-    poke_data = await fetch_pokemon_data(pokemon_name)
+    poke_data = await fetch_pokemon_data(pokemon_api_name)
     if not poke_data:
         return {'success': False, 'error': f"Pokémon '{pokemon_api_name}' não encontrado na API."}
     
@@ -78,9 +78,63 @@ class TrainerNameModal(ui.Modal, title="Crie seu Personagem"):
         embed = discord.Embed(title="Escolha sua Região Inicial", description=f"Ótimo nome, **{trainer_name}**! Agora, escolha a região onde sua aventura vai começar.", color=discord.Color.blue())
         await interaction.response.send_message(embed=embed, view=RegionSelectView(trainer_name=trainer_name, supabase_client=self.supabase), ephemeral=True)
 
+
 # =================================================================
-# CORREÇÃO APLICADA AQUI
+# ALTERAÇÃO 1: Adicionando a StarterSelectView
 # =================================================================
+class StarterSelectView(ui.View):
+    def __init__(self, region: str):
+        super().__init__(timeout=180)
+        self.region = region
+        starters = {
+            "Kanto": ["bulbasaur", "charmander", "squirtle"], "Johto": ["chikorita", "cyndaquil", "totodile"],
+            "Hoenn": ["treecko", "torchic", "mudkip"], "Sinnoh": ["turtwig", "chimchar", "piplup"],
+            "Unova": ["snivy", "tepig", "oshawott"], "Kalos": ["chespin", "fennekin", "froakie"],
+            "Alola": ["rowlet", "litten", "popplio"], "Galar": ["grookey", "scorbunny", "sobble"],
+            "Paldea": ["sprigatito", "fuecoco", "quaxly"]
+        }
+        # Adiciona botões para cada inicial da região escolhida
+        for starter in starters.get(region, []):
+            button = ui.Button(label=starter.capitalize(), style=discord.ButtonStyle.primary, custom_id=starter)
+            button.callback = self.select_starter
+            self.add_item(button)
+
+    async def select_starter(self, interaction: discord.Interaction):
+        starter_name = interaction.data['custom_id']
+        
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(view=self)
+
+        result = await add_pokemon_to_player(
+            player_id=interaction.user.id,
+            pokemon_api_name=starter_name,
+            level=5,
+            captured_at=f"Recebido em {self.region}"
+        )
+        
+        if result['success']:
+            pokemon_data = result['data']
+            is_shiny = pokemon_data.get('is_shiny', False)
+            shiny_text = "\n\n✨ **UAU, ELE É SHINY! QUE SORTE!** ✨" if is_shiny else ""
+            
+            # Envia uma mensagem pública para celebrar a escolha
+            public_embed = discord.Embed(
+                title="Uma Nova Jornada Começa!",
+                description=f"{interaction.user.mention} iniciou sua aventura e escolheu **{starter_name.capitalize()}** como seu primeiro parceiro!{shiny_text}",
+                color=discord.Color.green()
+            )
+            poke_api_data = await fetch_pokemon_data(starter_name)
+            if poke_api_data:
+                sprite_url = poke_api_data['sprites']['front_shiny'] if is_shiny else poke_api_data['sprites']['front_default']
+                public_embed.set_thumbnail(url=sprite_url)
+            
+            await interaction.followup.send(embed=public_embed) # Envia para o canal
+        else:
+            await interaction.followup.send(f"Ocorreu um erro ao adicionar seu Pokémon: {result['error']}", ephemeral=True)
+        self.stop()
+
+
 class RegionSelectView(ui.View):
     def __init__(self, trainer_name: str, supabase_client: Client):
         super().__init__(timeout=180)
@@ -88,11 +142,8 @@ class RegionSelectView(ui.View):
         self.supabase = supabase_client
 
     async def select_region(self, interaction: discord.Interaction, region: str):
-        # 1. Desativa todos os botões na View
         for item in self.children: 
             item.disabled = True
-        
-        # 2. Responde à interação UMA VEZ, editando a mensagem original para mostrar os botões desativados.
         await interaction.response.edit_message(view=self)
 
         discord_id = interaction.user.id
@@ -100,10 +151,13 @@ class RegionSelectView(ui.View):
         
         try:
             self.supabase.table('players').insert(player_data).execute()
-            # 3. Usa followup.send() para enviar uma NOVA mensagem de confirmação.
-            await interaction.followup.send(f"🎉 Bem-vindo ao mundo Pokémon, **{self.trainer_name}**! 🎉\nSua aventura começa agora na região de **{region}**. O próximo passo é conseguir seu primeiro Pokémon!", ephemeral=True)
+            # =================================================================
+            # ALTERAÇÃO 2: Chamando a StarterSelectView após criar o jogador
+            # =================================================================
+            starter_embed = discord.Embed(title=f"Bem-vindo(a) a {region}!", description="Agora, a escolha mais importante: quem será seu parceiro inicial?", color=discord.Color.blue())
+            await interaction.followup.send(embed=starter_embed, view=StarterSelectView(region=region), ephemeral=True)
+
         except Exception as e:
-            # O followup também é usado para mensagens de erro.
             await interaction.followup.send(f"Ocorreu um erro ao salvar seus dados: {e}", ephemeral=True)
         self.stop()
 
@@ -149,7 +203,7 @@ class ConfirmDeleteView(ui.View):
         await interaction.followup.send("Ação cancelada. Sua jornada continua!", ephemeral=True)
         self.stop()
 
-# --- Cog Class ---
+# --- Cog Class (Sem alterações) ---
 
 class PlayerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
