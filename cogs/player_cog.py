@@ -90,7 +90,7 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
     base_hp = poke_data['stats'][0]['base_stat']
     # <<< MUDANÇA: Renomeado para clareza
     calculated_max_hp = int((2 * base_hp * level) / 100) + level + 10 
-    is_shiny = random.randint(1, 2) == 1
+    is_shiny = random.randint(1, 100) == 1
     party_position = pokemon_count + 1
     
     # >>> BUSCA E ADICIONA OS ATAQUES AQUI <<<
