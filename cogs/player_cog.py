@@ -29,21 +29,46 @@ def get_supabase_client():
     key: str = os.environ.get("SUPABASE_KEY")
     return create_client(url, key)
 
-# MOCKUP da função, caso você não tenha o arquivo utils pronto.
-# Substitua isso pelo seu import real.
+# =================================================================
+# ALTERAÇÃO 2: Função de ataques corrigida para padronizar 4 slots
+# =================================================================
 def get_initial_moves(pokemon_data, level):
-    """Mockup: Pega os 4 primeiros ataques aprendidos até o nível 5."""
-    moves = []
-    for move_data in pokemon_data['moves']:
+    """Mockup: Pega até 4 ataques aprendidos até o nível 5."""
+    moves = set() # <<< MUDANÇA: Usar um set para evitar duplicatas
+
+    # Ordena os ataques pelo nível em que são aprendidos
+    sorted_moves = sorted(
+        pokemon_data['moves'], 
+        key=lambda m: min(
+            (vg['level_learned_at'] for vg in m['version_group_details'] if vg['move_learn_method']['name'] == 'level-up' and vg['level_learned_at'] > 0), 
+            default=float('inf')
+        )
+    )
+
+    for move_data in sorted_moves:
+        if len(moves) >= 4:
+            break # Já temos 4 ataques
+
         for version_group in move_data['version_group_details']:
-            if version_group['move_learn_method']['name'] == 'level-up' and version_group['level_learned_at'] <= level and version_group['level_learned_at'] > 0:
-                moves.append(move_data['move']['name'])
-                if len(moves) >= 4:
-                    return list(set(moves)) # Remove duplicatas e retorna
-    return list(set(moves)) if moves else ["tackle"] # Garante que tenha pelo menos um ataque
+            if version_group['move_learn_method']['name'] == 'level-up' and 0 < version_group['level_learned_at'] <= level:
+                moves.add(move_data['move']['name'])
+                break # Ataque adicionado, ir para o próximo da lista de ataques
+    
+    final_moves = list(moves)
+    
+    # <<< MUDANÇA: Garante que a lista tenha 4 elementos, preenchendo com None
+    while len(final_moves) < 4:
+        final_moves.append(None)
+    
+    # Retorna os 4 primeiros ou um ataque padrão se a lista estiver vazia
+    if not final_moves:
+        return ["tackle", None, None, None] 
+        
+    return final_moves[:4] # Garante que tenhamos exatamente 4 slots
+
 
 # =================================================================
-# ALTERAÇÃO 2: Atualizando a função central para incluir os ataques
+# ALTERAÇÃO 3: Atualizando a função central para incluir HP Máximo e Nickname
 # =================================================================
 async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: int = 5, captured_at: str = "Início da Jornada") -> dict:
     """Função centralizada que agora também adiciona os ataques iniciais."""
@@ -63,7 +88,8 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
     
     # Lógica para HP, Shiny, Posição...
     base_hp = poke_data['stats'][0]['base_stat']
-    current_hp = int((2 * base_hp * level) / 100) + level + 10
+    # <<< MUDANÇA: Renomeado para clareza
+    calculated_max_hp = int((2 * base_hp * level) / 100) + level + 10 
     is_shiny = random.randint(1, 2) == 1
     party_position = pokemon_count + 1
     
@@ -73,11 +99,13 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
     new_pokemon_data = { 
         "player_id": player_id, 
         "pokemon_api_name": pokemon_api_name, 
+        "nickname": pokemon_api_name.capitalize(), # <<< MUDANÇA: Adiciona o Nickname (Corrige Erro 1 e 3)
         "captured_at_location": captured_at, 
         "is_shiny": is_shiny, 
         "party_position": party_position, 
         "current_level": level, 
-        "current_hp": current_hp, 
+        "current_hp": calculated_max_hp, # <<< MUDANÇA: Define o HP atual
+        "max_hp": calculated_max_hp,     # <<< MUDANÇA: Define o HP máximo (Corrige Erro 2)
         "current_xp": 0,
         "moves": initial_moves # Adiciona a lista de ataques ao registro
     }
