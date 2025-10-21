@@ -174,6 +174,7 @@ class EvolutionCog(commands.Cog):
 
     async def evolve_pokemon(self, discord_id: int, pokemon_db_id: str, new_pokemon_api_name: str, channel):
         """Atualiza os dados de um Pokémon no DB após evoluir."""
+        # Esta função agora é chamada pelo ShopCog, por isso é importante
         try:
             # Pega o nível atual para recalcular os stats da nova forma
             response = self.supabase.table('player_pokemon').select('current_level').eq('id', pokemon_db_id).single().execute()
@@ -214,12 +215,22 @@ class EvolutionCog(commands.Cog):
         possible_evolutions = find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])
         if not possible_evolutions: return
 
-        if len(possible_evolutions) > 1:
-            view = EvolutionChoiceView(pokemon['id'], possible_evolutions, self)
+        # Filtra evoluções por item (agora tratadas no !buy)
+        valid_evolutions = []
+        for evo in possible_evolutions:
+            trigger = evo['evolution_details'][0]['trigger']['name']
+            if trigger != 'use-item':
+                valid_evolutions.append(evo)
+        
+        if not valid_evolutions:
+            return # Nenhuma evolução válida (ex: Eevee só evolui por item)
+
+        if len(valid_evolutions) > 1:
+            view = EvolutionChoiceView(pokemon['id'], valid_evolutions, self)
             await channel.send(f"Seu **{pokemon['nickname']}** está pronto para evoluir! Escolha seu caminho:", view=view)
             return
 
-        next_evo = possible_evolutions[0]
+        next_evo = valid_evolutions[0]
         evo_details = next_evo['evolution_details'][0]
         trigger = evo_details['trigger']['name']
         
@@ -255,58 +266,8 @@ class EvolutionCog(commands.Cog):
             await ctx.send(f"Ocorreu um erro inesperado ao dar XP.")
             print(f"Erro no comando !givexp: {e}")
 
-    # <<< !!! COMANDO !TEAM REMOVIDO DESTE ARQUIVO !!! >>>
-    # A funcionalidade agora existe em cogs/team_cog.py
-
-    @commands.command(name='shop', help='Mostra a loja de itens evolutivos.')
-    async def shop(self, ctx: commands.Context):
-        """Mostra uma loja com itens evolutivos."""
-        embed = discord.Embed(title="🛒 Loja de Itens Evolutivos 🛒", color=discord.Color.blue())
-        embed.description = "Use o comando `!buy \"Nome do Item\" <Nome do Pokémon>`."
-        items = [
-            {"name": "Fire Stone", "price": 5000}, {"name": "Water Stone", "price": 5000},
-            {"name": "Thunder Stone", "price": 5000}, {"name": "Leaf Stone", "price": 5000},
-        ]
-        for item in items:
-            embed.add_field(name=f"{item['name']} - `${item['price']:,}`", value="\u200b", inline=False)
-        await ctx.send(embed=embed)
-
-    @commands.command(name='buy', help='Compra um item evolutivo para um Pokémon.')
-    async def buy(self, ctx: commands.Context, item_name: str, *, pokemon_name: str):
-        """Simula a compra e o uso imediato de um item para evolução."""
-        try:
-            pokemon_response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_name.strip()).single().execute()
-
-            if not pokemon_response.data:
-                await ctx.send(f"Não encontrei um Pokémon chamado `{pokemon_name}` na sua equipe.")
-                return
-
-            pokemon = pokemon_response.data
-            
-            species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
-            if not species_data or not species_data.get('evolution_chain'):
-                await ctx.send(f"**{pokemon_name}** não parece poder evoluir com itens.")
-                return
-
-            evo_chain_url = species_data['evolution_chain']['url']
-            evo_chain_data = await get_data_from_url(evo_chain_url)
-            possible_evolutions = find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])
-            
-            found_match = False
-            for evo in possible_evolutions:
-                details = evo['evolution_details'][0]
-                if details['trigger']['name'] == 'use-item' and details.get('item') and details['item']['name'] == item_name.lower().replace(' ', '-'):
-                    new_form = evo['species']['name']
-                    # Adicionar lógica de custo do item aqui
-                    await self.evolve_pokemon(ctx.author.id, pokemon['id'], new_form, ctx.channel)
-                    found_match = True
-                    break
-            
-            if not found_match:
-                await ctx.send(f"O item **{item_name}** não parece ter efeito em **{pokemon_name}**.")
-        except Exception as e:
-            await ctx.send(f"Ocorreu um erro inesperado no comando !buy.")
-            print(f"Erro no comando !buy: {e}")
+    # <<< !!! COMANDOS !SHOP E !BUY REMOVIDOS DESTE ARQUIVO !!! >>>
+    # A funcionalidade agora existe em cogs/shop_cog.py
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(EvolutionCog(bot))
