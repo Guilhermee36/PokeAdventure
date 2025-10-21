@@ -85,33 +85,46 @@ class ShopCog(commands.Cog):
             print(f"Erro ao atualizar dinheiro: {e}")
             return False
 
+    # =================================================================
+    # <<< CORREÇÃO APLICADA AQUI >>>
+    # =================================================================
     async def add_item_to_inventory(self, player_id: int, item_id: int, quantity: int = 1):
         """Adiciona um item ao inventário do jogador (upsert)."""
         try:
-            # 1. Tenta buscar o item
-            current = self.supabase.table('player_inventory') \
+            # 1. Tenta buscar o item (SEM .single())
+            current_response = self.supabase.table('player_inventory') \
                 .select('quantity') \
                 .eq('player_id', player_id) \
                 .eq('item_id', item_id) \
-                .single().execute()
+                .execute()
 
-            if current.data:
-                # Se existe, atualiza somando
-                new_quantity = current.data['quantity'] + quantity
+            # current_response.data agora será [] (vazio) se o item não existe,
+            # ou [{'quantity': 5}] se ele existe.
+
+            if current_response.data:
+                # Se a lista NÃO está vazia, o item existe.
+                current_quantity = current_response.data[0]['quantity']
+                new_quantity = current_quantity + quantity
+                
                 self.supabase.table('player_inventory') \
                     .update({'quantity': new_quantity}) \
                     .eq('player_id', player_id) \
                     .eq('item_id', item_id) \
                     .execute()
             else:
-                # Se não existe, insere
+                # Se a lista ESTÁ vazia, o item não existe. Insere um novo.
                 self.supabase.table('player_inventory') \
                     .insert({'player_id': player_id, 'item_id': item_id, 'quantity': quantity}) \
                     .execute()
-            return True
+            
+            return True # Sucesso em ambos os casos
+            
         except Exception as e:
             print(f"Erro ao adicionar item ao inventário: {e}")
             return False
+    # =================================================================
+    # <<< FIM DA CORREÇÃO >>>
+    # =================================================================
 
     @commands.command(name='shop', help='Mostra a loja de itens.')
     async def shop(self, ctx: commands.Context):
@@ -261,7 +274,7 @@ class ShopCog(commands.Cog):
             print(f"Erro no comando !buy (ShopCog): {e}")
 
     # =================================================================
-    # <<< NOVO COMANDO ADICIONADO AQUI >>>
+    # <<< COMANDO GIVE MONEY (Permanece igual) >>>
     # =================================================================
     @commands.command(name='givemoney', help='(Admin) Adiciona dinheiro ao seu perfil.')
     @commands.is_owner()
