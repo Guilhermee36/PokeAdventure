@@ -1,4 +1,4 @@
-# evolution_cog.py
+# cogs/evolution_cog.py
 
 import discord
 import os
@@ -255,29 +255,8 @@ class EvolutionCog(commands.Cog):
             await ctx.send(f"Ocorreu um erro inesperado ao dar XP.")
             print(f"Erro no comando !givexp: {e}")
 
-    @commands.command(name='team', help='Mostra todos os seus Pokémon.')
-    async def team(self, ctx: commands.Context):
-        """Exibe a lista de Pokémon que o jogador possui."""
-        try:
-            response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).order('current_level', desc=True).execute()
-            if not response.data:
-                await ctx.send("Você ainda não capturou nenhum Pokémon!")
-                return
-
-            embed = discord.Embed(title=f"Equipe de {ctx.author.display_name}", color=discord.Color.teal())
-            embed.set_thumbnail(url=ctx.author.avatar.url)
-            for pokemon in response.data:
-                field_name = f"**{pokemon['nickname']}** ({pokemon['pokemon_api_name'].capitalize()})"
-                moves_list = [move.capitalize() for move in pokemon.get('moves', []) if move]
-                moves_display = ', '.join(moves_list) if moves_list else 'Nenhum'
-                field_value = (f"**Nível:** {pokemon['current_level']} | **XP:** {pokemon['current_xp']}\n"
-                               f"**HP:** {pokemon.get('current_hp', 0)}/{pokemon.get('max_hp', 0)}\n"
-                               f"**Ataques:** {moves_display}")
-                embed.add_field(name=field_name, value=field_value, inline=False)
-            await ctx.send(embed=embed)
-        except Exception as e:
-            await ctx.send(f"Ocorreu um erro ao buscar sua equipe.")
-            print(f"Erro no comando !team: {e}")
+    # <<< !!! COMANDO !TEAM REMOVIDO DESTE ARQUIVO !!! >>>
+    # A funcionalidade agora existe em cogs/team_cog.py
 
     @commands.command(name='shop', help='Mostra a loja de itens evolutivos.')
     async def shop(self, ctx: commands.Context):
