@@ -1,11 +1,11 @@
 # cogs/shop_cog.py
 
-import asyncio
 import discord
 from discord.ext import commands
 from discord import ui
 import os
 import aiohttp
+import asyncio # Importado para o listener on_ready
 from supabase import create_client, Client
 from postgrest import APIResponse
 
@@ -88,17 +88,6 @@ class ShopCog(commands.Cog):
     async def add_item_to_inventory(self, player_id: int, item_id: int, quantity: int = 1):
         """Adiciona um item ao inventário do jogador (upsert)."""
         try:
-            self.supabase.table('player_inventory').upsert({
-                'player_id': player_id,
-                'item_id': item_id,
-                'quantity': quantity
-            }, on_conflict='player_id, item_id').execute()
-            # Se o item já existe, precisamos somar a quantidade
-            # A função acima só funciona para novos itens ou sobrescrita
-            
-            # Lógica correta de UPSERT + INCREMENT
-            # (Supabase/PostgreSQL não torna o INCREMENT fácil no upsert)
-            
             # 1. Tenta buscar o item
             current = self.supabase.table('player_inventory') \
                 .select('quantity') \
@@ -271,6 +260,35 @@ class ShopCog(commands.Cog):
             await ctx.send(f"Ocorreu um erro inesperado no comando !buy.")
             print(f"Erro no comando !buy (ShopCog): {e}")
 
+    # =================================================================
+    # <<< NOVO COMANDO ADICIONADO AQUI >>>
+    # =================================================================
+    @commands.command(name='givemoney', help='(Admin) Adiciona dinheiro ao seu perfil.')
+    @commands.is_owner()
+    async def give_money(self, ctx: commands.Context, amount: int):
+        """(Admin) Dá dinheiro para o jogador."""
+        if amount <= 0:
+            await ctx.send("A quantia deve ser um número positivo.")
+            return
+
+        try:
+            # 1. Pega o dinheiro atual
+            current_money = await self.get_player_money(ctx.author.id)
+            
+            # 2. Calcula o novo total
+            new_amount = current_money + amount
+            
+            # 3. Atualiza no banco de dados
+            success = await self.update_player_money(ctx.author.id, new_amount)
+            
+            if success:
+                await ctx.send(f"💸 Você adicionou ${amount:,} à sua conta! Novo saldo: ${new_amount:,}.")
+            else:
+                await ctx.send("Falha ao atualizar o dinheiro no banco de dados.")
+        
+        except Exception as e:
+            await ctx.send(f"Ocorreu um erro inesperado: {e}")
+            print(f"Erro no !givemoney: {e}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ShopCog(bot))
