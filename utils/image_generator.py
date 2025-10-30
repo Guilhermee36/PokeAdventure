@@ -15,8 +15,8 @@ GRAY_COLOR = (100, 100, 100)
 # Caminhos das fontes (ELE VAI PROCURAR NA PASTA 'assets' QUE VOCÊ CRIOU)
 try:
     FONT_BOLD = ImageFont.truetype("assets/static/Roboto-Bold.ttf", 36)
-    FONT_REGULAR = ImageFont.truetype("assets/Roboto-Regular.ttf", 20)
-    FONT_SMALL = ImageFont.truetype("assets/Roboto-Regular.ttf", 16)
+    FONT_REGULAR = ImageFont.truetype("assets/static/Roboto-Regular.ttf", 20)
+    FONT_SMALL = ImageFont.truetype("assets/static/Roboto-Regular.ttf", 16)
 except IOError:
     print("ERRO: Arquivos de fonte (Roboto-Bold.ttf, Roboto-Regular.ttf) não encontrados na pasta 'assets'!")
     print("Usando fontes padrão do sistema. A imagem pode ficar feia.")
