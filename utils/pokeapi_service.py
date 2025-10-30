@@ -2,6 +2,7 @@
 
 import aiohttp
 import math
+import re
 
 # Cache manual para armazenar os RESULTADOS (JSON), não as corrotinas.
 # A chave será a URL completa para garantir que cada endpoint seja único.
@@ -123,3 +124,46 @@ def get_initial_moves(pokemon_api_data: dict, starting_level: int) -> list:
         initial_moves.append(None)
     
     return initial_moves
+
+# ==========================================================
+# ADICIONE TODAS ESTAS NOVAS FUNÇÕES ABAIXO NO SEU ARQUIVO
+# ==========================================================
+
+def _clean_flavor_text(text: str) -> str:
+    """Limpa o texto da Pokédex removendo caracteres especiais."""
+    if not text:
+        return "Nenhuma descrição encontrada."
+    # Remove quebras de linha, \f (form feed) e outros caracteres estranhos
+    text = text.replace('\n', ' ').replace('\f', ' ')
+    # Remove caracteres de controle Zalgo/unicode estranhos, se houver
+    text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+    # Garante que não haja espaços duplos
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+def get_portuguese_flavor_text(species_data: dict) -> str:
+    """Encontra a primeira entrada de flavor text em Português (pt)."""
+    if 'flavor_text_entries' not in species_data:
+        return "Nenhuma descrição encontrada."
+
+    for entry in species_data['flavor_text_entries']:
+        if entry['language']['name'] == 'pt':
+            return _clean_flavor_text(entry['flavor_text'])
+    
+    # Se não achar 'pt', tenta 'en' como fallback
+    for entry in species_data['flavor_text_entries']:
+        if entry['language']['name'] == 'en':
+            return _clean_flavor_text(entry['flavor_text'])
+
+    return "Descrição não disponível."
+
+async def download_image_bytes(url: str) -> bytes | None:
+    """Baixa uma imagem de uma URL e retorna os bytes."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    return await resp.read()
+    except Exception as e:
+        print(f"Erro ao baixar imagem: {e}")
+        return None
