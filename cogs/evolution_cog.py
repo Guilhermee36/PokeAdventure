@@ -100,23 +100,41 @@ class EvolutionCog(commands.Cog):
 
         newly_learned_moves = []
         for move_info in pokemon_api_data['moves']:
+            move_name = move_info['move']['name'] # Pegamos o nome aqui
             for version_details in move_info['version_group_details']:
-                if version_details['move_learn_method']['name'] == 'level-up' and version_details['level_learned_at'] == new_level:
-                    newly_learned_moves.append(move_info['move']['name'])
+                # CONDIÇÃO DE CORREÇÃO 1:
+                # Verificamos se o método é level-up, se o nível bate
+                # E (o mais importante) se o ataque JÁ NÃO ESTÁ na nossa lista
+                if (version_details['move_learn_method']['name'] == 'level-up' and
+                    version_details['level_learned_at'] == new_level and
+                    move_name not in newly_learned_moves): # <-- Impede duplicatas
+                    
+                    newly_learned_moves.append(move_name)
+                    break # Otimização: Já encontramos esse ataque, não precisa checar outras versões
         
         if not newly_learned_moves:
             return
 
-        response = self.supabase.table('player_pokemon').select('moves').eq('id', pokemon['id']).single().execute()
-        if not response.data: return
-        current_moves = response.data['moves']
+        # CORREÇÃO 2:
+        # Removemos a busca de 'moves' daqui de fora...
 
         for move_name in newly_learned_moves:
+            # ...e colocamos ELA AQUI DENTRO.
+            # Isso garante que a CADA novo ataque que tentamos aprender,
+            # pegamos a lista mais ATUALIZADA do banco de dados.
+            try:
+                response = self.supabase.table('player_pokemon').select('moves').eq('id', pokemon['id']).single().execute()
+                if not response.data: continue
+                current_moves = response.data['moves']
+            except Exception as e:
+                print(f"Erro ao buscar moves atualizados em check_for_new_moves: {e}")
+                continue # Pula este ataque se não conseguir verificar
+
+            # Esta verificação agora usa a lista 'current_moves' fresca
             if move_name in current_moves:
                 continue
 
-            response = self.supabase.table('player_pokemon').select('moves').eq('id', pokemon['id']).single().execute()
-            current_moves = response.data['moves']
+            # Removemos a busca duplicada que existia aqui (linha 120 antiga)
 
             if None in current_moves:
                 empty_slot_index = current_moves.index(None)
@@ -130,7 +148,7 @@ class EvolutionCog(commands.Cog):
                 )
                 view = MoveReplaceView(pokemon['id'], move_name, current_moves, self)
                 await channel.send(embed=embed, view=view)
-                await view.wait()
+                await view.wait() # O loop vai pausar aqui e, ao continuar, vai buscar a lista de moves nova na próxima iteração.
 
     async def check_for_level_up(self, pokemon: dict, channel):
         """Verifica se um Pokémon tem XP suficiente para subir de nível e atualiza stats."""
