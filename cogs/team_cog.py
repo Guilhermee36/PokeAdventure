@@ -36,12 +36,11 @@ class TeamCog(commands.Cog):
 
         try:
             # 1. Buscar time no Supabase
-            # !!! IMPORTANTE: Estou assumindo que sua tabela 'player_pokemon'
-            # tem uma coluna chamada 'team_position' (com números de 1 a 6).
+            # !!! CORREÇÃO APLICADA AQUI !!!
             response = self.supabase.table('player_pokemon').select('*') \
                 .eq('player_id', player_id) \
-                .not_.is_('team_position', 'null') \
-                .order('team_position', desc=False).execute() # Ordena por 1, 2, 3...
+                .not_.is_('party_position', 'null') \
+                .order('party_position', desc=False).execute() # Ordena por 1, 2, 3...
 
             if not response.data:
                 await msg.edit(content="Você ainda não tem um time! Capture um Pokémon.")
@@ -50,15 +49,18 @@ class TeamCog(commands.Cog):
             team_pokemon_db = response.data
             
             # 2. Separar o focado dos demais
-            focused_db_data = next((p for p in team_pokemon_db if p['team_position'] == focused_slot), None)
+            # !!! CORREÇÃO APLICADA AQUI !!!
+            focused_db_data = next((p for p in team_pokemon_db if p['party_position'] == focused_slot), None)
             
             # Se o slot focado estiver vazio (ex: !team 6 mas só tem 3 pokémon),
             # apenas pega o primeiro do time como foco.
             if not focused_db_data:
                 focused_db_data = team_pokemon_db[0]
-                focused_slot = focused_db_data['team_position'] # Atualiza o slot real
+                # !!! CORREÇÃO APLICADA AQUI !!!
+                focused_slot = focused_db_data['party_position'] # Atualiza o slot real
 
-            other_team_db = [p for p in team_pokemon_db if p['team_position'] != focused_slot]
+            # !!! CORREÇÃO APLICADA AQUI !!!
+            other_team_db = [p for p in team_pokemon_db if p['party_position'] != focused_slot]
 
             # 3. Buscar dados da PokeAPI (em paralelo)
             await msg.edit(content="Carregando dados da Pokédex... 📖")
