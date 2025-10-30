@@ -1,170 +1,116 @@
 # cogs/team_cog.py
-
 import discord
+import os
 from discord.ext import commands
 from discord import ui
-import os
-import aiohttp
 from supabase import create_client, Client
+from io import BytesIO
 
-# --- Funções Auxiliares (Copiadas de outros cogs para modularidade) ---
-
-def get_supabase_client():
-    """Cria e retorna um cliente Supabase."""
-    url: str = os.environ.get("SUPABASE_URL")
-    key: str = os.environ.get("SUPABASE_KEY")
-    return create_client(url, key)
-
-async def fetch_pokemon_data(pokemon_name: str):
-    """Busca dados de um Pokémon da PokeAPI."""
-    url = f"https://pokeapi.co/api/v2/pokemon/{pokemon_name.lower()}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                return await response.json()
-            return None
-
-# --- Classes de UI (A nova View paginada) ---
-
-class TeamView(ui.View):
-    """
-    Uma View paginada para exibir os Pokémon da equipe de um jogador.
-    Mostra um Pokémon por página.
-    """
-    
-    def __init__(self, author_id: int, pokemon_list: list, supabase_client: Client):
-        super().__init__(timeout=120.0) # Timeout de 2 minutos
-        self.author_id = author_id
-        self.pokemon_list = pokemon_list
-        self.supabase = supabase_client
-        self.current_index = 0
-        self.message: discord.Message = None # Armazena a mensagem para editar no timeout
-        
-        # Atualiza o estado dos botões (desativa o 'anterior' no início)
-        self.update_buttons()
-
-    async def generate_embed(self) -> discord.Embed:
-        """Cria o Embed para o Pokémon atual."""
-        
-        # Pega o Pokémon da lista com base no índice atual
-        pokemon = self.pokemon_list[self.current_index]
-        
-        # Busca dados da API para pegar o sprite
-        api_data = await fetch_pokemon_data(pokemon['pokemon_api_name'])
-        
-        # Define o sprite (shiny ou padrão)
-        is_shiny = pokemon.get('is_shiny', False)
-        sprite_url = None
-        if api_data and api_data['sprites']:
-            sprite_url = api_data['sprites']['front_shiny'] if is_shiny else api_data['sprites']['front_default']
-
-        # Formata o apelido e o nome
-        nickname = pokemon['nickname']
-        species = pokemon['pokemon_api_name'].capitalize()
-        
-        title = f"✨ {nickname} ✨ (Shiny)" if is_shiny else f"{nickname}"
-        if nickname.lower() != species.lower():
-            title += f" ({species})" # Ex: "Sparky (Pikachu)"
-
-        embed = discord.Embed(title=title, color=discord.Color.blue())
-        
-        if sprite_url:
-            embed.set_thumbnail(url=sprite_url)
-
-        # Adiciona Stats (Exemplo com os stats que temos certeza que existem no DB)
-        embed.add_field(name="Nível", value=str(pokemon['current_level']), inline=True)
-        embed.add_field(name="HP", value=f"{pokemon.get('current_hp', 0)} / {pokemon.get('max_hp', 0)}", inline=True)
-        embed.add_field(name="XP", value=f"{pokemon['current_xp']}", inline=True)
-        
-        # Adiciona Posição
-        embed.add_field(name="Posição no Time", value=f"Slot {pokemon.get('party_position', 'N/A')}", inline=False)
-
-        # Formata a lista de ataques
-        moves_list = [move.capitalize() for move in pokemon.get('moves', []) if move]
-        moves_display = ', '.join(moves_list) if moves_list else 'Nenhum ataque aprendido.'
-        embed.add_field(name="Ataques", value=moves_display, inline=False)
-        
-        embed.set_footer(text=f"Pokémon {self.current_index + 1} / {len(self.pokemon_list)}")
-        
-        return embed
-
-    def update_buttons(self):
-        """Ativa/Desativa botões de navegação."""
-        # Botão 'Anterior'
-        self.children[0].disabled = self.current_index == 0
-        # Botão 'Próximo'
-        self.children[1].disabled = self.current_index == (len(self.pokemon_list) - 1)
-
-    @ui.button(label="⬅️ Anterior", style=discord.ButtonStyle.secondary, custom_id="prev")
-    async def previous_button(self, interaction: discord.Interaction, button: ui.Button):
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message("Este não é o seu time!", ephemeral=True)
-            return
-            
-        self.current_index -= 1
-        self.update_buttons()
-        
-        new_embed = await self.generate_embed()
-        await interaction.response.edit_message(embed=new_embed, view=self)
-
-    @ui.button(label="Próximo ➡️", style=discord.ButtonStyle.secondary, custom_id="next")
-    async def next_button(self, interaction: discord.Interaction, button: ui.Button):
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message("Este não é o seu time!", ephemeral=True)
-            return
-            
-        self.current_index += 1
-        self.update_buttons()
-        
-        new_embed = await self.generate_embed()
-        await interaction.response.edit_message(embed=new_embed, view=self)
-
-    async def on_timeout(self):
-        """Desativa os botões quando a View expira."""
-        for item in self.children:
-            item.disabled = True
-        
-        # Edita a mensagem original se ela ainda existir
-        if self.message:
-            try:
-                await self.message.edit(view=self)
-            except discord.NotFound:
-                pass # A mensagem pode ter sido excluída
-
-# --- Cog Class ---
+# Importa nossos novos helpers
+import utils.pokeapi_service as pokeapi
+import utils.image_generator as img_gen
 
 class TeamCog(commands.Cog):
+    """Cog para gerenciar o time do jogador e exibir a nova imagem."""
+
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.supabase: Client = get_supabase_client()
+        url: str = os.environ.get("SUPABASE_URL")
+        key: str = os.environ.get("SUPABASE_KEY")
+        self.supabase: Client = create_client(url, key)
+        print("TeamCog carregado.")
 
-    @commands.command(name='team', help='Mostra sua equipe de Pokémon em uma interface paginada.')
-    async def team(self, ctx: commands.Context):
-        """Exibe a lista de Pokémon que o jogador possui, paginada."""
+    @commands.command(name='team', help='Mostra seu time Pokémon. Use !team [1-6] para focar.')
+    async def team(self, ctx: commands.Context, focused_slot: int = 1):
+        """
+        Exibe o time do jogador.
+        Por padrão, foca no Pokémon da posição 1.
+        Use !team 2 para focar no Pokémon da posição 2, e assim por diante.
+        """
+        if not 1 <= focused_slot <= 6:
+            await ctx.send("Posição inválida. Escolha um número de 1 a 6.")
+            return
+
+        player_id = ctx.author.id
+        msg = await ctx.send(f"Buscando seu time... 🔍")
+
         try:
-            # Busca os Pokémon ordenados pela posição no time
+            # 1. Buscar time no Supabase
+            # !!! IMPORTANTE: Estou assumindo que sua tabela 'player_pokemon'
+            # tem uma coluna chamada 'team_position' (com números de 1 a 6).
             response = self.supabase.table('player_pokemon').select('*') \
-                .eq('player_id', ctx.author.id) \
-                .order('party_position', desc=False) \
-                .execute()
+                .eq('player_id', player_id) \
+                .not_.is_('team_position', 'null') \
+                .order('team_position', desc=False).execute() # Ordena por 1, 2, 3...
 
             if not response.data:
-                await ctx.send("Você ainda não capturou nenhum Pokémon! Use `!start` para começar.")
+                await msg.edit(content="Você ainda não tem um time! Capture um Pokémon.")
                 return
 
-            # Cria a View
-            view = TeamView(author_id=ctx.author.id, pokemon_list=response.data, supabase_client=self.supabase)
+            team_pokemon_db = response.data
             
-            # Gera o primeiro embed (página 1)
-            initial_embed = await view.generate_embed()
+            # 2. Separar o focado dos demais
+            focused_db_data = next((p for p in team_pokemon_db if p['team_position'] == focused_slot), None)
             
-            # Envia a mensagem e armazena a referência
-            msg = await ctx.send(embed=initial_embed, view=view)
-            view.message = msg
+            # Se o slot focado estiver vazio (ex: !team 6 mas só tem 3 pokémon),
+            # apenas pega o primeiro do time como foco.
+            if not focused_db_data:
+                focused_db_data = team_pokemon_db[0]
+                focused_slot = focused_db_data['team_position'] # Atualiza o slot real
+
+            other_team_db = [p for p in team_pokemon_db if p['team_position'] != focused_slot]
+
+            # 3. Buscar dados da PokeAPI (em paralelo)
+            await msg.edit(content="Carregando dados da Pokédex... 📖")
+            
+            # Focado (precisamos de dados completos)
+            f_api_data = await pokeapi.get_pokemon_data(focused_db_data['pokemon_api_name'])
+            f_species_data = await pokeapi.get_pokemon_species_data(focused_db_data['pokemon_api_name'])
+            
+            if not f_api_data or not f_species_data:
+                 await msg.edit(content="Erro ao buscar dados do Pokémon principal.")
+                 return
+            
+            focused_pokemon = {
+                'db_data': focused_db_data,
+                'api_data': f_api_data,
+                'species_data': f_species_data
+            }
+            
+            # Outros (só precisamos do sprite)
+            other_team_list = []
+            for other_db in other_team_db:
+                o_api_data = await pokeapi.get_pokemon_data(other_db['pokemon_api_name'])
+                if o_api_data:
+                    other_team_list.append({
+                        'db_data': other_db,
+                        'api_data': o_api_data
+                    })
+
+            # 4. Gerar a Imagem
+            await msg.edit(content="Desenhando seu time... 🎨")
+            image_buffer = await img_gen.create_team_image(focused_pokemon, other_team_list)
+            
+            if not image_buffer:
+                await msg.edit(content="Erro ao gerar a imagem do time.")
+                return
+
+            # 5. Enviar a Imagem
+            file = discord.File(image_buffer, filename=f"{ctx.author.name}_team.png")
+            embed = discord.Embed(
+                title=f"Time de {ctx.author.display_name}",
+                description=f"Mostrando detalhes de **{focused_db_data['nickname'].capitalize()}** (Slot {focused_slot}).\nUse `!team [1-6]` para focar em outro.",
+                color=discord.Color.blue()
+            )
+            embed.set_image(url=f"attachment://{file.filename}")
+            
+            await msg.delete() # Deleta a mensagem de "carregando"
+            await ctx.send(embed=embed, file=file)
 
         except Exception as e:
-            await ctx.send(f"Ocorreu um erro ao buscar sua equipe.")
-            print(f"Erro no comando !team (TeamCog): {e}")
+            print(f"Erro no comando !team: {e}")
+            await msg.edit(content=f"Ocorreu um erro inesperado. O admin foi notificado.")
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(TeamCog(bot))
