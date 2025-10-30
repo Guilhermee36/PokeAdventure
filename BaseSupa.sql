@@ -1,97 +1,83 @@
--- ========= TABELA 1: PLAYERS =========
--- Armazena os dados principais de cada jogador, usando o ID do Discord como chave.
-CREATE TABLE players (
-  discord_id BIGINT PRIMARY KEY,
-  trainer_name TEXT NOT NULL,
-  money INTEGER NOT NULL DEFAULT 0,
-  badges INTEGER NOT NULL DEFAULT 0,
-  current_region TEXT DEFAULT 'Pallet Town',
-  masterballs_owned INTEGER NOT NULL DEFAULT 0
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.items (
+  id integer NOT NULL DEFAULT nextval('items_id_seq'::regclass),
+  name text NOT NULL UNIQUE,
+  type text NOT NULL,
+  description text,
+  effect_tag text,
+  CONSTRAINT items_pkey PRIMARY KEY (id)
 );
-COMMENT ON TABLE players IS 'Tabela principal dos jogadores, vinculada ao ID do Discord.';
-
-
--- ========= TABELA 2: PLAYER_POKEMON =========
--- Armazena cada Pokémon único que um jogador possui, com seus dados dinâmicos.
-CREATE TABLE player_pokemon (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  player_id BIGINT NOT NULL REFERENCES players(discord_id) ON DELETE CASCADE,
-  pokemon_api_name TEXT NOT NULL,
-  nickname TEXT,
-  captured_at_location TEXT,
-  is_shiny BOOLEAN NOT NULL DEFAULT false,
-  party_position INTEGER,
-  current_level INTEGER NOT NULL DEFAULT 5,
-  current_xp INTEGER NOT NULL DEFAULT 0,
-  current_hp INTEGER NOT NULL,
-  CONSTRAINT party_position_check CHECK (party_position IS NULL OR (party_position >= 1 AND party_position <= 6)),
-  CONSTRAINT unique_party_position UNIQUE (player_id, party_position)
+CREATE TABLE public.npc_pokemon_party (
+  id integer NOT NULL DEFAULT nextval('npc_pokemon_party_id_seq'::regclass),
+  npc_id integer NOT NULL,
+  pokemon_api_name text NOT NULL,
+  level integer NOT NULL,
+  max_hp integer DEFAULT 0,
+  attack integer DEFAULT 0,
+  defense integer DEFAULT 0,
+  special_attack integer DEFAULT 0,
+  special_defense integer DEFAULT 0,
+  speed integer DEFAULT 0,
+  moves jsonb DEFAULT '[null, null, null, null]'::jsonb,
+  current_hp integer NOT NULL,
+  CONSTRAINT npc_pokemon_party_pkey PRIMARY KEY (id),
+  CONSTRAINT npc_pokemon_party_npc_id_fkey FOREIGN KEY (npc_id) REFERENCES public.npcs(id)
 );
-COMMENT ON TABLE player_pokemon IS 'Cada linha é um Pokémon único pertencente a um jogador, com seus status que mudam.';
-
-
--- ========= TABELA 3: NPCS =========
--- Armazena todos os NPCs do jogo, sejam eles de batalha ou apenas para diálogo.
-CREATE TABLE npcs (
-  id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL,
-  is_battler BOOLEAN NOT NULL DEFAULT false,
-  personality_prompt TEXT,
-  dialogue_example TEXT,
-  reward_on_interact TEXT
+CREATE TABLE public.npcs (
+  id integer NOT NULL DEFAULT nextval('npcs_id_seq'::regclass),
+  name text NOT NULL,
+  is_battler boolean NOT NULL DEFAULT false,
+  personality_prompt text,
+  dialogue_example text,
+  reward_on_interact text,
+  CONSTRAINT npcs_pkey PRIMARY KEY (id)
 );
-COMMENT ON TABLE npcs IS 'Define os personagens não-jogáveis do mundo, de batalha ou não.';
-
-
--- ========= TABELA 4: NPC_POKEMON_PARTY =========
--- Tabela para montar o time dos NPCs que são batalhadores.
-CREATE TABLE npc_pokemon_party (
-  id SERIAL PRIMARY KEY,
-  npc_id INTEGER NOT NULL REFERENCES npcs(id) ON DELETE CASCADE,
-  pokemon_api_name TEXT NOT NULL,
-  level INTEGER NOT NULL
+CREATE TABLE public.player_inventory (
+  player_id bigint NOT NULL,
+  item_id integer NOT NULL,
+  quantity integer NOT NULL CHECK (quantity >= 0),
+  CONSTRAINT player_inventory_pkey PRIMARY KEY (player_id, item_id),
+  CONSTRAINT player_inventory_player_id_fkey FOREIGN KEY (player_id) REFERENCES public.players(discord_id),
+  CONSTRAINT player_inventory_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.items(id)
 );
-COMMENT ON TABLE npc_pokemon_party IS 'Define o time de um NPC batalhador.';
-
-
--- ========= TABELA 5: PLAYER_QUESTS =========
--- Armazena o progresso das missões ou da história principal para cada jogador.
-CREATE TABLE player_quests (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  player_id BIGINT NOT NULL REFERENCES players(discord_id) ON DELETE CASCADE,
-  quest_name TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active',
-  story_summary_so_far TEXT,
-  CONSTRAINT status_check CHECK (status IN ('active', 'completed', 'failed'))
+CREATE TABLE public.player_pokemon (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  player_id bigint NOT NULL,
+  pokemon_api_name text NOT NULL,
+  nickname text,
+  captured_at_location text,
+  is_shiny boolean NOT NULL DEFAULT false,
+  party_position integer CHECK (party_position IS NULL OR party_position >= 1 AND party_position <= 6),
+  current_level integer NOT NULL DEFAULT 5,
+  current_xp integer NOT NULL DEFAULT 0,
+  current_hp integer NOT NULL,
+  max_hp integer DEFAULT 0,
+  attack integer DEFAULT 0,
+  defense integer DEFAULT 0,
+  special_attack integer DEFAULT 0,
+  special_defense integer DEFAULT 0,
+  speed integer DEFAULT 0,
+  moves jsonb DEFAULT '[null, null, null, null]'::jsonb,
+  CONSTRAINT player_pokemon_pkey PRIMARY KEY (id),
+  CONSTRAINT player_pokemon_player_id_fkey FOREIGN KEY (player_id) REFERENCES public.players(discord_id)
 );
-COMMENT ON TABLE player_quests IS 'Rastreia o progresso de missões para cada jogador.';
-
-
--- ========= TABELA 6: ITEMS (CATÁLOGO) =========
--- Catálogo de todos os itens existentes no jogo.
-CREATE TABLE items (
-  id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  type TEXT NOT NULL, -- Ex: 'ball', 'healing', 'key_item'
-  description TEXT,
-  effect_tag TEXT -- Tag para o código interpretar a função do item
+CREATE TABLE public.player_quests (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  player_id bigint NOT NULL,
+  quest_name text NOT NULL,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'completed'::text, 'failed'::text])),
+  story_summary_so_far text,
+  CONSTRAINT player_quests_pkey PRIMARY KEY (id),
+  CONSTRAINT player_quests_player_id_fkey FOREIGN KEY (player_id) REFERENCES public.players(discord_id)
 );
-COMMENT ON TABLE items IS 'Catálogo mestre de todos os itens do jogo.';
-
-
--- ========= TABELA 7: PLAYER_INVENTORY =========
--- Inventário dos jogadores, ligando um jogador a um item e sua quantidade.
-CREATE TABLE player_inventory (
-  player_id BIGINT NOT NULL REFERENCES players(discord_id) ON DELETE CASCADE,
-  item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-  quantity INTEGER NOT NULL CHECK (quantity >= 0),
-  PRIMARY KEY (player_id, item_id)
+CREATE TABLE public.players (
+  discord_id bigint NOT NULL,
+  trainer_name text NOT NULL,
+  money integer NOT NULL DEFAULT 0,
+  badges integer NOT NULL DEFAULT 0,
+  current_region text DEFAULT 'Pallet Town'::text,
+  masterballs_owned integer NOT NULL DEFAULT 0,
+  CONSTRAINT players_pkey PRIMARY KEY (discord_id)
 );
-COMMENT ON TABLE player_inventory IS 'Mostra quantos de cada item um jogador possui.';
-
--- ========= DADOS INICIAIS PARA A TABELA DE ITENS =========
-INSERT INTO items (name, type, description, effect_tag) VALUES
-  ('pokeball', 'ball', 'Uma bola usada para capturar Pokémon selvagens.', 'CATCH_RATE:1.0'),
-  ('potion', 'healing', 'Restaura 20 HP de um Pokémon.', 'HEAL:20'),
-  ('revive', 'healing', 'Reanima um Pokémon desmaiado com metade do HP.', 'REVIVE:0.5'),
-  ('antidote', 'healing', 'Cura um Pokémon envenenado.', 'CURE:poison');
