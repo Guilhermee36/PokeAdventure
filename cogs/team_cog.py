@@ -8,9 +8,10 @@ import asyncio
 import json # Importado para o debug
 
 # Importa nossos helpers
+# Agora usamos mais funções do pokeapi_service
 import utils.pokeapi_service as pokeapi
 
-# --- HELPER: Barra de Progresso (Atualizada) ---
+# --- HELPER: Barra de Progresso (Corrigida na última interação) ---
 def _create_progress_bar(
     current: int, 
     total: int, 
@@ -19,9 +20,9 @@ def _create_progress_bar(
 ) -> str:
     """Cria uma barra de progresso em texto com emojis customizáveis e porcentagem."""
     
-    # Evita divisão por zero
-    if total == 0:
-        return f"[{emojis[1] * bar_length}]\n0/0 (0%)"
+    # Evita divisão por zero se o total for 0 (ex: Lvl 1 para Lvl 1)
+    if total <= 0:
+        return f"[{emojis[0] * bar_length}]\nProgresso Inicial!"
     
     current = min(current, total)
     percent = float(current) / total
@@ -31,7 +32,7 @@ def _create_progress_bar(
     bar_filled = emojis[0]
     bar_empty = emojis[1]
     
-    # ✅ CORREÇÃO: Adicionado \n para forçar quebra de linha e evitar quebra feia
+    # ✅ CORREÇÃO: Adicionado \n para forçar quebra de linha
     return f"[{bar_filled * filled}{bar_empty * empty}]\n{current}/{total} ({percent:.0%})"
 
 class TeamNavigationView(ui.View):
@@ -56,22 +57,18 @@ class TeamNavigationView(ui.View):
         await interaction.response.defer(ephemeral=False)
         
         try:
-            # ==================================
-            # !!! CORREÇÃO APLICADA AQUI (Síncrono) !!!
-            # ==================================
-            # A função _get_player_team_sync agora é chamada sem await
-            # (Ela não é mais async)
             self.full_team_data_db = self.cog._get_player_team_sync(self.player_id)
             
             focused_db_data = self.full_team_data_db[self.current_slot - 1]
             
-            # Esta função _get_focused_pokemon_details continua async (pokeapi)
+            # ✅ ATUALIZAÇÃO: Esta função agora também busca os dados de XP
             focused_pokemon = await self.cog._get_focused_pokemon_details(focused_db_data)
             
             if not focused_pokemon:
                 await interaction.followup.send("Erro ao buscar dados do Pokémon principal da PokeAPI.", ephemeral=True)
                 return
             
+            # ✅ ATUALIZAÇÃO: O embed usará os novos dados de XP
             embed = await self.cog._build_team_embed(focused_pokemon, self.full_team_data_db, self.current_slot)
             
             self._update_buttons()
@@ -87,7 +84,6 @@ class TeamNavigationView(ui.View):
     async def previous_pokemon(self, interaction: discord.Interaction, button: ui.Button):
         if self.current_slot > 1:
             self.current_slot -= 1
-            # A função _send_updated_team_embed lida com a busca de dados síncrona
             await self._send_updated_team_embed(interaction)
         else:
             await interaction.response.defer()
@@ -107,21 +103,16 @@ class TeamCog(commands.Cog):
         key: str = os.environ.get("SUPABASE_KEY")
         self.supabase: Client = create_client(url, key)
 
-    # ==================================
-    # !!! MUDANÇA PRINCIPAL AQUI !!!
-    # Renomeada para _get_player_team_sync e removido o 'async def'
-    # ==================================
     
-    # (Indentação corrigida)
     def _get_player_team_sync(self, player_id: int) -> list:
         try:
             response = (
                 self.supabase.table("player_pokemon")
                 .select("*")
                 .eq("player_id", player_id)
-                .filter("party_position", "not.is", "null")  # ✅ substitui .not_()
+                .filter("party_position", "not.is", "null")
                 .order("party_position", desc=False)
-                .execute()  # ✅ chamada correta para versão 2.x
+                .execute()
             )
 
             return response.data or []
@@ -132,25 +123,48 @@ class TeamCog(commands.Cog):
 
 
     async def _get_focused_pokemon_details(self, p_mon_db: dict) -> dict:
-        # Esta função (pokeapi_service) já é async (aiohttp), então está perfeita.
+        """
+        Função ATUALIZADA:
+        Agora busca dados da API, dados da espécie (para tradução) e os limites de XP.
+        """
         api_data = await pokeapi.get_pokemon_data(p_mon_db['pokemon_api_name'])
         if not api_data:
             return None
         
-        # ❗ O PROBLEMA DO TEXTO EM INGLÊS ESTÁ AQUI ❗
-        # A função get_portuguese_flavor_text (do outro arquivo) não deve estar filtrando "pt".
+        # 1. Busca dados da espécie (para tradução e XP)
         species_data = await pokeapi.get_pokemon_species_data(p_mon_db['pokemon_api_name'])
+        
+        # 2. Pega o texto em PT-BR (Problema do texto em inglês resolvido)
         flavor_text = pokeapi.get_portuguese_flavor_text(species_data) if species_data else "Descrição não encontrada."
 
         sprite_url = api_data.get('sprites', {}).get('other', {}).get('official-artwork', {}).get('front_default')
         if not sprite_url:
             sprite_url = api_data.get('sprites', {}).get('front_default', '')
 
+        # --- ✅ NOVA LÓGICA DE XP ---
+        xp_for_next_level = float('inf') # Padrão para Nível Máx
+        xp_for_current_level = 0       # Padrão para Nível 1
+        
+        if species_data and 'growth_rate' in species_data:
+            growth_rate_url = species_data['growth_rate']['url']
+            current_level = p_mon_db['current_level']
+            
+            # Busca o XP total necessário para o próximo nível
+            xp_for_next_level = await pokeapi.get_total_xp_for_level(growth_rate_url, current_level + 1)
+            
+            # Busca o XP total necessário para o nível atual (se não for Lvl 1)
+            if current_level > 1:
+                xp_for_current_level = await pokeapi.get_total_xp_for_level(growth_rate_url, current_level)
+        # --- Fim da Lógica de XP ---
+
         return {
             "db_data": p_mon_db,
             "api_data": api_data,
             "flavor_text": flavor_text,
-            "sprite_url": sprite_url
+            "sprite_url": sprite_url,
+            # Passa os novos dados de XP para a função de criar o embed
+            "xp_for_next_level": xp_for_next_level,
+            "xp_for_current_level": xp_for_current_level
         }
         
     async def _build_team_embed(self, focused_pokemon_details: dict, full_team_db: list, focused_slot: int) -> discord.Embed:
@@ -163,32 +177,46 @@ class TeamCog(commands.Cog):
         
         embed = discord.Embed(
             title=f"{nickname} - LV{level}",
-            description=f"_{focused_pokemon_details['flavor_text']}_", # (Vem do pokeapi_service.py)
+            description=f"_{focused_pokemon_details['flavor_text']}_", # (Agora em PT-BR)
             color=discord.Color.blue()
         )
         
         if focused_pokemon_details['sprite_url']:
             embed.set_thumbnail(url=focused_pokemon_details['sprite_url'])
         
-        # --- (Barras agora usam a função corrigida) ---
-        hp_emojis = ('🟩', '⬛') # Verde para HP
-        xp_emojis = ('🟦', '⬛') # Azul para XP
-
+        # --- Barra de HP (Inalterada) ---
+        hp_emojis = ('🟩', '⬛')
         hp_bar = _create_progress_bar(
             db_data['current_hp'], 
             db_data['max_hp'], 
             emojis=hp_emojis
         )
         
-        xp_total_level = 100 
-        xp_bar = _create_progress_bar(
-            db_data['current_xp'], 
-            xp_total_level, 
-            emojis=xp_emojis
-        ) 
+        # --- ✅ LÓGICA DE XP ATUALIZADA ---
+        xp_emojis = ('🟦', '⬛')
+        
+        current_total_xp = db_data['current_xp']
+        xp_base_level = focused_pokemon_details['xp_for_current_level']
+        xp_prox_level = focused_pokemon_details['xp_for_next_level']
+
+        # Se for nível máximo (infinito)
+        if xp_prox_level == float('inf'):
+            xp_bar = f"[{xp_emojis[0] * 10}]\nNível Máximo"
+        else:
+            # Total de XP necessário para *passar* deste nível
+            total_xp_for_this_level = xp_prox_level - xp_base_level
+            # XP que o Pokémon já ganhou *neste* nível
+            current_xp_in_this_level = current_total_xp - xp_base_level
+            
+            xp_bar = _create_progress_bar(
+                current_xp_in_this_level, 
+                total_xp_for_this_level, 
+                emojis=xp_emojis
+            )
+        # --- Fim da Melhoria de XP ---
         
         embed.add_field(name="HP", value=hp_bar, inline=False)
-        embed.add_field(name="XP", value=xp_bar, inline=False)
+        embed.add_field(name="XP", value=xp_bar, inline=False) # (Agora exibe o XP relativo)
 
         moves_list = []
         if db_data.get('moves'):
@@ -216,9 +244,6 @@ class TeamCog(commands.Cog):
         msg = await ctx.send(f"Buscando seu time, {ctx.author.display_name}... 🔍")
         
         try:
-            # ==================================
-            # !!! CHAMADA SÍNCRONA AQUI !!!
-            # ==================================
             full_team_data_db = self._get_player_team_sync(player_id)
             
             if not full_team_data_db:
@@ -232,12 +257,14 @@ class TeamCog(commands.Cog):
             
             await msg.edit(content=f"Buscando dados de **{focused_db_data['nickname'].capitalize()}**...")
             
+            # (Agora busca dados de XP e tradução)
             focused_pokemon = await self._get_focused_pokemon_details(focused_db_data)
             
             if not focused_pokemon:
                 await msg.edit(content="Erro ao buscar dados do Pokémon principal da PokeAPI.")
                 return
             
+            # (Agora usa os novos dados para o embed)
             embed = await self._build_team_embed(focused_pokemon, full_team_data_db, focused_slot)
             view = TeamNavigationView(self, player_id, focused_slot, max_slot, full_team_data_db)
             
@@ -263,18 +290,14 @@ class TeamCog(commands.Cog):
         await ctx.send(f"--- 🔎 Iniciando Debug do Time para Player ID: `{player_id}` ---")
         
         try:
-            # ==================================
-            # !!! CHAMADA SÍNCRONA AQUI !!!
-            # ==================================
-            
             # Teste 1: A consulta exata que o !team usa
             await ctx.send(f"**TESTE 1:** Buscando Pokémon COM `.filter(\"party_position\", \"not.is\", \"null\")`...")
             response_with_not_null = (
                 self.supabase.table("player_pokemon")
                 .select("*")
                 .eq("player_id", player_id)
-                .filter("party_position", "not.is", "null")  # (Corrigido na última vez)
-                .execute() # Chamada direta
+                .filter("party_position", "not.is", "null")
+                .execute()
             )
             
             await ctx.send(f"**Resultado (Teste 1):**\n> Total encontrado: {len(response_with_not_null.data)}\n> ```json\n{json.dumps(response_with_not_null.data, indent=2)}\n```")
@@ -285,7 +308,7 @@ class TeamCog(commands.Cog):
                 self.supabase.table("player_pokemon")
                 .select("*")
                 .eq("player_id", player_id)
-                .execute() # Chamada direta
+                .execute()
             )
             
             await ctx.send(f"**Resultado (Teste 2):**\n> Total encontrado: {len(response_all.data)}\n> ```json\n{json.dumps(response_all.data, indent=2)}\n```")
