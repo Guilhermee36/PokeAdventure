@@ -21,7 +21,7 @@ def _create_progress_bar(
     
     # Evita divisão por zero
     if total == 0:
-        return f"[{emojis[1] * bar_length}] 0/0 (0%)"
+        return f"[{emojis[1] * bar_length}]\n0/0 (0%)"
     
     current = min(current, total)
     percent = float(current) / total
@@ -31,8 +31,8 @@ def _create_progress_bar(
     bar_filled = emojis[0]
     bar_empty = emojis[1]
     
-    # Adiciona a porcentagem
-    return f"[{bar_filled * filled}{bar_empty * empty}] {current}/{total} ({percent:.0%})"
+    # ✅ CORREÇÃO: Adicionado \n para forçar quebra de linha e evitar quebra feia
+    return f"[{bar_filled * filled}{bar_empty * empty}]\n{current}/{total} ({percent:.0%})"
 
 class TeamNavigationView(ui.View):
     def __init__(self, cog: commands.Cog, player_id: int, current_slot: int, max_slot: int, full_team_data_db: list):
@@ -137,7 +137,8 @@ class TeamCog(commands.Cog):
         if not api_data:
             return None
         
-        # Lógica para buscar a descrição em PT-BR (já estava correta)
+        # ❗ O PROBLEMA DO TEXTO EM INGLÊS ESTÁ AQUI ❗
+        # A função get_portuguese_flavor_text (do outro arquivo) não deve estar filtrando "pt".
         species_data = await pokeapi.get_pokemon_species_data(p_mon_db['pokemon_api_name'])
         flavor_text = pokeapi.get_portuguese_flavor_text(species_data) if species_data else "Descrição não encontrada."
 
@@ -162,15 +163,14 @@ class TeamCog(commands.Cog):
         
         embed = discord.Embed(
             title=f"{nickname} - LV{level}",
-            description=f"_{focused_pokemon_details['flavor_text']}_", # Já em PT-BR
+            description=f"_{focused_pokemon_details['flavor_text']}_", # (Vem do pokeapi_service.py)
             color=discord.Color.blue()
         )
         
         if focused_pokemon_details['sprite_url']:
             embed.set_thumbnail(url=focused_pokemon_details['sprite_url'])
         
-        # --- ✅ MELHORIA NAS BARRAS ---
-        # Define os emojis para cada barra
+        # --- (Barras agora usam a função corrigida) ---
         hp_emojis = ('🟩', '⬛') # Verde para HP
         xp_emojis = ('🟦', '⬛') # Azul para XP
 
@@ -186,7 +186,6 @@ class TeamCog(commands.Cog):
             xp_total_level, 
             emojis=xp_emojis
         ) 
-        # --- Fim da Melhoria ---
         
         embed.add_field(name="HP", value=hp_bar, inline=False)
         embed.add_field(name="XP", value=xp_bar, inline=False)
@@ -198,15 +197,13 @@ class TeamCog(commands.Cog):
                     moves_list.append(f"• {move_name.replace('-', ' ').capitalize()}")
         
         if not moves_list:
-            moves_list.append("Nenhum movimento aprendido.") # Já em PT-BR
+            moves_list.append("Nenhum movimento aprendido.") 
             
-        # --- ✅ TRADUÇÃO ---
         embed.add_field(name="GOLPES", value="\n".join(moves_list), inline=False)
 
         species_name = api_data['name'].capitalize()
         pokedex_id = api_data['id']
         
-        # --- ✅ TRADUÇÃO ---
         embed.set_footer(text=f"Slot {focused_slot}/{len(full_team_db)} | {species_name} (Pokedex Nº {pokedex_id})")
         
         return embed
