@@ -10,32 +10,42 @@ from . import pokeapi_service as pokeapi
 CANVAS_WIDTH = 900
 CANVAS_HEIGHT = 600
 BG_COLOR = (44, 47, 51) # Fundo escuro
-TEXT_COLOR = (255, 255, 255) # Texto branco
 BOX_COLOR = (54, 57, 63) # Cor de caixa (um pouco mais clara que o fundo)
-SELECTED_PARTY_COLOR = (88, 101, 242) # Azul
+SELECTED_PARTY_COLOR = (88, 101, 242) # Azul Discord
 HP_BAR_BG_COLOR = (80, 80, 80)
 XP_BAR_COLOR = (0, 150, 255) # Azul para XP
+TEXT_COLOR = (255, 255, 255) # Texto branco
+TEXT_COLOR_GRAY = (180, 180, 180) # Texto cinza claro
 
-# --- AJUSTE DE FONTES ---
-# Aumentamos todos os tamanhos
+# Dicionário de Cores dos Tipos (para os ícones)
+TYPE_COLORS = {
+    'normal': (168, 168, 120), 'fire': (240, 128, 48), 'water': (104, 144, 240),
+    'grass': (120, 200, 80), 'electric': (248, 208, 48), 'ice': (152, 216, 216),
+    'fighting': (192, 48, 40), 'poison': (160, 64, 160), 'ground': (224, 192, 104),
+    'flying': (168, 144, 240), 'psychic': (248, 88, 136), 'bug': (168, 184, 32),
+    'rock': (184, 160, 56), 'ghost': (112, 88, 152), 'dragon': (112, 56, 248),
+    'dark': (112, 88, 72), 'steel': (184, 184, 208), 'fairy': (240, 182, 188),
+}
+
+# --- Carregamento de Fontes ---
 try:
-    FONT_NICKNAME = ImageFont.truetype("assets/Roboto-Bold.ttf", 40)
-    FONT_LEVEL = ImageFont.truetype("assets/Roboto-Regular.ttf", 30)
-    FONT_TITLE = ImageFont.truetype("assets/Roboto-Bold.ttf", 22)
-    FONT_REGULAR = ImageFont.truetype("assets/Roboto-Regular.ttf", 20)
-    FONT_SMALL = ImageFont.truetype("assets/Roboto-Regular.ttf", 18)
-    FONT_MOVE = ImageFont.truetype("assets/Roboto-Bold.ttf", 16)
+    FONT_NICKNAME = ImageFont.truetype("assets/Roboto-Bold.ttf", 36)
+    FONT_LEVEL = ImageFont.truetype("assets/Roboto-Regular.ttf", 26)
+    FONT_TITLE = ImageFont.truetype("assets/Roboto-Bold.ttf", 20)
+    FONT_BODY = ImageFont.truetype("assets/Roboto-Regular.ttf", 16)
+    FONT_SMALL = ImageFont.truetype("assets/Roboto-Regular.ttf", 14)
+    FONT_TYPE = ImageFont.truetype("assets/Roboto-Bold.ttf", 14)
 except IOError:
-    print("ERRO: Fontes Roboto não encontradas! Usando fontes padrão (texto pode ficar desalinhado).")
+    print("ERRO: Fontes Roboto não encontradas! Usando fontes padrão.")
     FONT_NICKNAME = ImageFont.load_default()
     FONT_LEVEL = ImageFont.load_default()
     FONT_TITLE = ImageFont.load_default()
-    FONT_REGULAR = ImageFont.load_default()
+    FONT_BODY = ImageFont.load_default()
     FONT_SMALL = ImageFont.load_default()
-    FONT_MOVE = ImageFont.load_default()
-
+    FONT_TYPE = ImageFont.load_default()
 
 # --- Funções Auxiliares ---
+
 async def _get_sprite(url: str, size: tuple = None) -> Image.Image | None:
     img_bytes = await pokeapi.download_image_bytes(url)
     if not img_bytes: return None
@@ -43,31 +53,37 @@ async def _get_sprite(url: str, size: tuple = None) -> Image.Image | None:
     if size: img = img.resize(size, Image.LANCZOS)
     return img
 
-def _draw_rounded_rectangle(draw_obj, xy, corner_radius, fill):
-    """Desenha um retângulo com cantos arredondados."""
+def _draw_rounded_rectangle(draw_obj, xy, corner_radius, fill, outline=None, width=1):
     x1, y1, x2, y2 = xy
-    draw_obj.rectangle(
-        (x1 + corner_radius, y1, x2 - corner_radius, y2), fill=fill
-    )
-    draw_obj.rectangle(
-        (x1, y1 + corner_radius, x2, y2 - corner_radius), fill=fill
-    )
-    draw_obj.pieslice(
-        (x1, y1, x1 + corner_radius * 2, y1 + corner_radius * 2),
-        180, 270, fill=fill
-    )
-    draw_obj.pieslice(
-        (x2 - corner_radius * 2, y1, x2, y1 + corner_radius * 2),
-        270, 360, fill=fill
-    )
-    draw_obj.pieslice(
-        (x1, y2 - corner_radius * 2, x1 + corner_radius * 2, y2),
-        90, 180, fill=fill
-    )
-    draw_obj.pieslice(
-        (x2 - corner_radius * 2, y2 - corner_radius * 2, x2, y2),
-        0, 90, fill=fill
-    )
+    draw_obj.rectangle((x1 + corner_radius, y1, x2 - corner_radius, y2), fill=fill)
+    draw_obj.rectangle((x1, y1 + corner_radius, x2, y2 - corner_radius), fill=fill)
+    draw_obj.pieslice((x1, y1, x1 + corner_radius * 2, y1 + corner_radius * 2), 180, 270, fill=fill)
+    draw_obj.pieslice((x2 - corner_radius * 2, y1, x2, y1 + corner_radius * 2), 270, 360, fill=fill)
+    draw_obj.pieslice((x1, y2 - corner_radius * 2, x1 + corner_radius * 2, y2), 90, 180, fill=fill)
+    draw_obj.pieslice((x2 - corner_radius * 2, y2 - corner_radius * 2, x2, y2), 0, 90, fill=fill)
+    
+    if outline:
+        draw_obj.line((x1 + corner_radius, y1, x2 - corner_radius, y1), fill=outline, width=width)
+        draw_obj.line((x1 + corner_radius, y2, x2 - corner_radius, y2), fill=outline, width=width)
+        draw_obj.line((x1, y1 + corner_radius, x1, y2 - corner_radius), fill=outline, width=width)
+        draw_obj.line((x2, y1 + corner_radius, x2, y2 - corner_radius), fill=outline, width=width)
+        draw_obj.arc((x1, y1, x1 + corner_radius * 2, y1 + corner_radius * 2), 180, 270, fill=outline, width=width)
+        draw_obj.arc((x2 - corner_radius * 2, y1, x2, y1 + corner_radius * 2), 270, 360, fill=outline, width=width)
+        draw_obj.arc((x1, y2 - corner_radius * 2, x1 + corner_radius * 2, y2), 90, 180, fill=outline, width=width)
+        draw_obj.arc((x2 - corner_radius * 2, y2 - corner_radius * 2, x2, y2), 0, 90, fill=outline, width=width)
+
+def _draw_progress_bar(draw, xy, percentage, bg_color, fg_color, text, text_font):
+    """Desenha uma barra de progresso com texto centralizado."""
+    x1, y1, x2, y2 = xy
+    radius = (y2 - y1) // 2
+    # Fundo
+    _draw_rounded_rectangle(draw, xy, radius, bg_color)
+    # Preenchimento
+    if percentage > 0:
+        fill_x = x1 + (x2 - x1) * percentage
+        _draw_rounded_rectangle(draw, (x1, y1, fill_x, y2), radius, fg_color)
+    # Texto
+    draw.text((x1 + (x2 - x1) // 2, y1 + radius), text, font=text_font, fill=TEXT_COLOR, anchor="mm")
 
 # --- Função Principal ---
 
@@ -81,92 +97,91 @@ async def create_team_image(focused_pokemon: dict, full_team_db: list, focused_s
     f_mon_db = focused_pokemon['db_data']
     f_mon_api = focused_pokemon['api_data']
     f_mon_species = focused_pokemon['species_data']
+    f_types = focused_pokemon['types']
     f_xp_percent = focused_pokemon['xp_percent']
-    f_xp_next = focused_pokemon['xp_for_next_level_raw']
-    f_xp_current = focused_pokemon['current_xp_raw']
     
-    # 2. Desenhar Nome e Nível (Topo Centralizado)
+    # 2. Coluna Esquerda: Informações do Pokémon
+    col_left_x = 40
+    col_width = 400
+    
+    # Sprite
+    sprite_url = f_mon_api['sprites']['other']['official-artwork']['front_default']
+    main_sprite = await _get_sprite(sprite_url, (300, 300))
+    if main_sprite:
+        canvas.paste(main_sprite, (col_left_x + (col_width - 300) // 2, 20), main_sprite) # Centralizado na coluna
+
+    # Nome e Nível
     f_name = f_mon_db['nickname'].capitalize()
     f_level = f_mon_db['current_level']
-    
-    draw.text((CANVAS_WIDTH // 2, 30), f_name, font=FONT_NICKNAME, fill=TEXT_COLOR, anchor="mt")
-    draw.text((CANVAS_WIDTH // 2, 80), f"Nv. {f_level}", font=FONT_LEVEL, fill=TEXT_COLOR, anchor="mt")
-    
-    # 3. Desenhar Sprite (Centro)
-    sprite_url = f_mon_api['sprites']['other']['official-artwork']['front_default']
-    main_sprite = await _get_sprite(sprite_url, (280, 280)) # Tamanho ajustado
-    if main_sprite:
-        canvas.paste(main_sprite, ((CANVAS_WIDTH - 280) // 2, 110), main_sprite)
+    draw.text((col_left_x + col_width // 2, 330), f_name, font=FONT_NICKNAME, fill=TEXT_COLOR, anchor="mt")
+    draw.text((col_left_x + col_width // 2, 375), f"Nv. {f_level}", font=FONT_LEVEL, fill=TEXT_COLOR_GRAY, anchor="mt")
 
-    # 4. Desenhar Ataques (Caixa à Esquerda)
-    box_x1_moves = 40
-    box_y1_moves = 130
-    box_x2_moves = 290
-    box_y2_moves = 370
-    _draw_rounded_rectangle(draw, (box_x1_moves, box_y1_moves, box_x2_moves, box_y2_moves), 10, BOX_COLOR)
+    # Tipos
+    type_y = 415
+    type_width = 70
+    type_height = 20
+    type_padding = 10
+    total_types_width = (type_width * len(f_types)) + (type_padding * (len(f_types) - 1))
+    type_x_start = col_left_x + (col_width - total_types_width) // 2
     
-    draw.text((box_x1_moves + 125, box_y1_moves + 15), "Ataques", font=FONT_TITLE, fill=TEXT_COLOR, anchor="mt")
+    for i, type_name in enumerate(f_types):
+        type_color = TYPE_COLORS.get(type_name, (100, 100, 100))
+        x = type_x_start + i * (type_width + type_padding)
+        _draw_rounded_rectangle(draw, (x, type_y, x + type_width, type_y + type_height), 5, type_color)
+        draw.text((x + type_width // 2, type_y + type_height // 2), type_name.upper(), font=FONT_TYPE, fill=TEXT_COLOR, anchor="mm")
+
+    # Barras de HP e XP
+    bar_y_hp = 450
+    bar_width = col_width - 40 # Largura da barra
+    bar_height = 20
+    bar_x = col_left_x + (col_width - bar_width) // 2
+    
+    # HP
+    f_hp = f_mon_db['current_hp']
+    f_max_hp = f_mon_db['max_hp']
+    hp_percent = f_hp / f_max_hp
+    hp_color = (0, 200, 0) # Verde
+    if hp_percent < 0.5: hp_color = (255, 200, 0) # Amarelo
+    if hp_percent < 0.2: hp_color = (255, 80, 80) # Vermelho
+    _draw_progress_bar(draw, (bar_x, bar_y_hp, bar_x + bar_width, bar_y_hp + bar_height), hp_percent, HP_BAR_BG_COLOR, hp_color, f"HP: {f_hp}/{f_max_hp}", FONT_SMALL)
+
+    # XP
+    bar_y_xp = bar_y_hp + bar_height + 10
+    xp_text = f"XP: {int(f_xp_percent * 100)}%"
+    _draw_progress_bar(draw, (bar_x, bar_y_xp, bar_x + bar_width, bar_y_xp + bar_height), f_xp_percent, HP_BAR_BG_COLOR, XP_BAR_COLOR, xp_text, FONT_SMALL)
+
+    # 3. Coluna Direita: Ataques e Descrição
+    col_right_x = CANVAS_WIDTH - col_width - col_left_x # = 460
+    
+    # Ataques
+    box_y1_moves = 40
+    box_height_moves = 200
+    _draw_rounded_rectangle(draw, (col_right_x, box_y1_moves, col_right_x + col_width, box_y1_moves + box_height_moves), 10, BOX_COLOR)
+    draw.text((col_right_x + col_width // 2, box_y1_moves + 20), "Ataques", font=FONT_TITLE, fill=TEXT_COLOR, anchor="mt")
     
     current_moves = f_mon_db.get('moves', [None] * 4)
     move_y_start = box_y1_moves + 60
     for i, move_name in enumerate(current_moves):
         move_name_display = move_name.replace('-', ' ').title() if move_name else "---"
-        draw.text((box_x1_moves + 125, move_y_start + i * 50), move_name_display, font=FONT_MOVE, fill=TEXT_COLOR, anchor="mm")
+        draw.text((col_right_x + 30, move_y_start + i * 30), f"• {move_name_display}", font=FONT_BODY, fill=TEXT_COLOR, anchor="lt")
 
-    # 5. Desenhar Descrição (Caixa à Direita)
-    box_x1_desc = CANVAS_WIDTH - 290
-    box_y1_desc = 130
-    box_x2_desc = CANVAS_WIDTH - 40
-    box_y2_desc = 370
-    _draw_rounded_rectangle(draw, (box_x1_desc, box_y1_desc, box_x2_desc, box_y2_desc), 10, BOX_COLOR)
-    
-    draw.text((box_x1_desc + 125, box_y1_desc + 15), "Descrição", font=FONT_TITLE, fill=TEXT_COLOR, anchor="mt")
-    
+    # Descrição
+    box_y1_desc = box_y1_moves + box_height_moves + 20 # = 260
+    box_height_desc = 230
+    _draw_rounded_rectangle(draw, (col_right_x, box_y1_desc, col_right_x + col_width, box_y1_desc + box_height_desc), 10, BOX_COLOR)
+    draw.text((col_right_x + col_width // 2, box_y1_desc + 20), "Descrição", font=FONT_TITLE, fill=TEXT_COLOR, anchor="mt")
+
     flavor_text = pokeapi.get_portuguese_flavor_text(f_mon_species)
-    wrapped_lines = textwrap.wrap(flavor_text, width=30) # Largura ajustada para a caixa
+    wrapped_lines = textwrap.wrap(flavor_text, width=45) # Largura ajustada para a caixa
     
     desc_y_start = box_y1_desc + 60
     for i, line in enumerate(wrapped_lines[:6]): # Limita a 6 linhas
-        draw.text((box_x1_desc + 125, desc_y_start + i * 25), line, font=FONT_SMALL, fill=TEXT_COLOR, anchor="mt")
+        draw.text((col_right_x + 25, desc_y_start + i * 25), line, font=FONT_BODY, fill=TEXT_COLOR_GRAY, anchor="lt")
 
-    # 6. Desenhar Barra de HP (Condicional)
-    bar_width = 400
-    bar_height = 20
-    bar_x = (CANVAS_WIDTH - bar_width) // 2
-    bar_y_hp = 400 # Posição Y da barra de HP
 
-    f_hp = f_mon_db['current_hp']
-    f_max_hp = f_mon_db['max_hp']
-    hp_percent = f_hp / f_max_hp
-    
-    hp_color = (0, 200, 0) # Verde
-    if hp_percent < 0.5: hp_color = (255, 200, 0) # Amarelo
-    if hp_percent < 0.2: hp_color = (255, 80, 80) # Vermelho
-
-    # Fundo
-    _draw_rounded_rectangle(draw, (bar_x, bar_y_hp, bar_x + bar_width, bar_y_hp + bar_height), 10, HP_BAR_BG_COLOR)
-    # Preenchimento
-    if hp_percent > 0:
-        _draw_rounded_rectangle(draw, (bar_x, bar_y_hp, bar_x + (bar_width * hp_percent), bar_y_hp + bar_height), 10, hp_color)
-    
-    hp_text = f"HP: {f_hp}/{f_max_hp}"
-    draw.text((bar_x + bar_width // 2, bar_y_hp + bar_height // 2), hp_text, font=FONT_SMALL, fill=TEXT_COLOR, anchor="mm")
-
-    # 7. Desenhar Barra de XP (!!! NOVO !!!)
-    bar_y_xp = bar_y_hp + bar_height + 15 # 15 pixels abaixo da barra de HP
-    
-    # Fundo
-    _draw_rounded_rectangle(draw, (bar_x, bar_y_xp, bar_x + bar_width, bar_y_xp + bar_height), 10, HP_BAR_BG_COLOR)
-    # Preenchimento
-    if f_xp_percent > 0:
-        _draw_rounded_rectangle(draw, (bar_x, bar_y_xp, bar_x + (bar_width * f_xp_percent), bar_y_xp + bar_height), 10, XP_BAR_COLOR)
-    
-    xp_text = f"XP: {f_xp_current} / {f_xp_next}"
-    draw.text((bar_x + bar_width // 2, bar_y_xp + bar_height // 2), xp_text, font=FONT_SMALL, fill=TEXT_COLOR, anchor="mm")
-
-    # 8. Desenhar Pokémon da Party (Inferior)
-    party_y_start = CANVAS_HEIGHT - 90
-    party_slot_size = 70
+    # 4. Linha Inferior: Party
+    party_y_start = CANVAS_HEIGHT - 80
+    party_slot_size = 60
     party_padding = 15
     
     total_party_width = len(full_team_db) * party_slot_size + (len(full_team_db) - 1) * party_padding
@@ -183,19 +198,17 @@ async def create_team_image(focused_pokemon: dict, full_team_db: list, focused_s
             sprite_url_small = p_mon_api_data['sprites']['front_default']
             small_sprite = await _get_sprite(sprite_url_small, (party_slot_size, party_slot_size))
             if small_sprite:
-                sprite_paste_x = slot_x + (party_slot_size - small_sprite.width) // 2
-                sprite_paste_y = party_y_start + (party_slot_size - small_sprite.height) // 2
-                canvas.paste(small_sprite, (sprite_paste_x, sprite_paste_y), small_sprite)
+                canvas.paste(small_sprite, (slot_x, party_y_start), small_sprite)
         
         draw.text(
             (slot_x + party_slot_size // 2, party_y_start + party_slot_size + 10),
-            f"Nv.{p_mon_db['current_level']}",
+            f"L.{p_mon_db['current_level']}",
             font=FONT_SMALL,
-            fill=TEXT_COLOR,
+            fill=TEXT_COLOR_GRAY,
             anchor="mt"
         )
 
-    # 9. Salvar em Buffer e Retornar
+    # 5. Salvar em Buffer e Retornar
     buffer = BytesIO()
     canvas.save(buffer, format="PNG")
     buffer.seek(0)
