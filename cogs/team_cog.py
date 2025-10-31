@@ -51,21 +51,18 @@ class TeamNavigationView(ui.View):
 
             file = discord.File(image_buffer, filename=f"{interaction.user.name}_team.png")
             
-            # VVV GRANDE MUDANÇA (SEM EMBED) VVV
             content = (
                 f"### Time de {interaction.user.display_name}\n"
                 f"Mostrando detalhes de **{focused_db_data['nickname'].capitalize()}** (Slot {self.current_slot}). "
                 "Use as setas para navegar."
             )
             
-            # Editamos a mensagem para ter 'content', 'embed=None', e o novo anexo
             await interaction.edit_original_response(
                 content=content, 
-                embed=None, # Remove o embed
-                attachments=[file], # Anexa a nova imagem
+                embed=None, 
+                attachments=[file], 
                 view=self
             )
-            # ^^^ FIM DA MUDANÇA ^^^
 
         except Exception as e:
             print(f"Erro ao atualizar imagem do time: {e}")
@@ -97,7 +94,6 @@ class TeamNavigationView(ui.View):
         for item in self.children:
             item.disabled = True
         try:
-            # Ao expirar, remove os botões da mensagem
             await self.message.edit(view=None)
         except discord.NotFound:
             pass 
@@ -111,7 +107,7 @@ class TeamCog(commands.Cog):
         print("TeamCog carregado.")
 
     async def _get_focused_pokemon_details(self, focused_db_data: dict) -> dict | None:
-        """Busca dados da API, tipos e calcula o XP para o Pokémon focado."""
+        """Busca dados da API e calcula o XP para o Pokémon focado."""
         try:
             f_api_data = await pokeapi.get_pokemon_data(focused_db_data['pokemon_api_name'])
             f_species_data = await pokeapi.get_pokemon_species_data(focused_db_data['pokemon_api_name'])
@@ -119,9 +115,7 @@ class TeamCog(commands.Cog):
             if not f_api_data or not f_species_data:
                 return None 
 
-            # VVV GRANDE MUDANÇA (BUSCA DE TIPOS) VVV
-            f_types = [t['type']['name'] for t in f_api_data.get('types', [])]
-            # ^^^ FIM DA MUDANÇA ^^^
+            ### MUDANÇA: Lógica de buscar tipos REMOVIDA ###
 
             # Lógica de Cálculo de XP
             f_level = focused_db_data['current_level']
@@ -142,8 +136,8 @@ class TeamCog(commands.Cog):
                 'db_data': focused_db_data,
                 'api_data': f_api_data,
                 'species_data': f_species_data,
-                'types': f_types, # Adiciona os tipos
                 'xp_percent': xp_percent
+                ### MUDANÇA: 'types' removido do dicionário ###
             }
         except Exception as e:
             print(f"Erro em _get_focused_pokemon_details: {e}")
@@ -188,7 +182,6 @@ class TeamCog(commands.Cog):
                 await msg.edit(content="Erro ao gerar a imagem do time.")
                 return
 
-            # VVV GRANDE MUDANÇA (SEM EMBED) VVV
             file = discord.File(image_buffer, filename=f"{ctx.author.name}_team.png")
             
             content = (
@@ -199,12 +192,10 @@ class TeamCog(commands.Cog):
 
             view = TeamNavigationView(self, player_id, focused_slot, max_slot, full_team_data_db)
             
-            await msg.delete() # Deleta o "Carregando..."
+            await msg.delete() 
             
-            # Envia a mensagem final SEM EMBED
             message = await ctx.send(content=content, file=file, view=view)
             view.message = message 
-            # ^^^ FIM DA MUDANÇA ^^^
 
         except Exception as e:
             print(f"Erro no comando !team: {e}")
