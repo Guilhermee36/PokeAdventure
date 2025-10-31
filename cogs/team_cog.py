@@ -48,7 +48,16 @@ class TeamNavigationView(ui.View):
         await interaction.response.defer(ephemeral=False)
         
         try:
+            # ==================================
+            # !!! CORREÇÃO APLICADA AQUI (Síncrono) !!!
+            # ==================================
+            # A função _get_player_team_sync agora é chamada sem await
+            # (Ela não é mais async)
+            self.full_team_data_db = self.cog._get_player_team_sync(self.player_id)
+            
             focused_db_data = self.full_team_data_db[self.current_slot - 1]
+            
+            # Esta função _get_focused_pokemon_details continua async (pokeapi)
             focused_pokemon = await self.cog._get_focused_pokemon_details(focused_db_data)
             
             if not focused_pokemon:
@@ -70,6 +79,7 @@ class TeamNavigationView(ui.View):
     async def previous_pokemon(self, interaction: discord.Interaction, button: ui.Button):
         if self.current_slot > 1:
             self.current_slot -= 1
+            # A função _send_updated_team_embed lida com a busca de dados síncrona
             await self._send_updated_team_embed(interaction)
         else:
             await interaction.response.defer()
@@ -89,14 +99,14 @@ class TeamCog(commands.Cog):
         key: str = os.environ.get("SUPABASE_KEY")
         self.supabase: Client = create_client(url, key)
 
-    async def _get_player_team(self, player_id: int) -> list:
-        """Busca o time completo (slots 1-6) do jogador no Supabase."""
+    # ==================================
+    # !!! MUDANÇA PRINCIPAL AQUI !!!
+    # Renomeada para _get_player_team_sync e removido o 'async def'
+    # ==================================
+    def _get_player_team_sync(self, player_id: int) -> list:
+        """Busca o time completo (slots 1-6) do jogador no Supabase (MODO SÍNCRONO)."""
         try:
-            # ==================================
-            # !!! CORREÇÃO APLICADA AQUI (Síncrono) !!!
-            # Removemos o asyncio.to_thread e chamamos .execute() diretamente.
-            # Isso vai "bloquear" o bot por uma fração de segundo, mas vai funcionar.
-            # ==================================
+            # Chamada Síncrona (bloqueante)
             response = (
                 self.supabase.table("player_pokemon")
                 .select("*")
@@ -108,12 +118,11 @@ class TeamCog(commands.Cog):
             
             return response.data
         except Exception as e:
-            # O erro "'...object is not callable" estava acontecendo aqui
-            print(f"Erro ao buscar time no SupABASE: {e}")
+            print(f"Erro ao buscar time no SupABASE (Sync): {e}")
             return []
 
     async def _get_focused_pokemon_details(self, p_mon_db: dict) -> dict:
-        # Esta função (pokeapi_service) já é async, então está ótima.
+        # Esta função (pokeapi_service) já é async (aiohttp), então está perfeita.
         api_data = await pokeapi.get_pokemon_data(p_mon_db['pokemon_api_name'])
         if not api_data:
             return None
@@ -182,7 +191,10 @@ class TeamCog(commands.Cog):
         msg = await ctx.send(f"Buscando seu time, {ctx.author.display_name}... 🔍")
         
         try:
-            full_team_data_db = await self._get_player_team(player_id)
+            # ==================================
+            # !!! CHAMADA SÍNCRONA AQUI !!!
+            # ==================================
+            full_team_data_db = self._get_player_team_sync(player_id)
             
             if not full_team_data_db:
                 await msg.edit(content="Você ainda não tem um time Pokémon! Use `!start` para começar sua jornada.")
@@ -230,7 +242,7 @@ class TeamCog(commands.Cog):
         
         try:
             # ==================================
-            # !!! CORREÇÃO APLICADA AQUI (Síncrono) !!!
+            # !!! CHAMADA SÍNCRONA AQUI !!!
             # ==================================
             
             # Teste 1: A consulta exata que o !team usa
@@ -256,7 +268,7 @@ class TeamCog(commands.Cog):
             
             await ctx.send(f"**Resultado (Teste 2):**\n> Total encontrado: {len(response_all.data)}\n> ```json\n{json.dumps(response_all.data, indent=2)}\n```")
             
-            await ctx.send("\n--- ✅ Debug Concluído ---")
+            await ctx.send("\n--- ✅ Debug Concluido ---")
 
         except Exception as e:
             await ctx.send(f"**ERRO DURANTE O DEBUG:**\n> ```{e}```")
