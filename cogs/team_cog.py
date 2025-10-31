@@ -1,3 +1,4 @@
+
 # cogs/team_cog.py
 import discord
 import os
