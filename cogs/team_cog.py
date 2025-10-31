@@ -103,23 +103,25 @@ class TeamCog(commands.Cog):
     # !!! MUDANÇA PRINCIPAL AQUI !!!
     # Renomeada para _get_player_team_sync e removido o 'async def'
     # ==================================
+    
+    # ✅ CORREÇÃO: Indentação alinhada com os outros métodos da classe
     def _get_player_team_sync(self, player_id: int) -> list:
-        """Busca o time completo (slots 1-6) do jogador no Supabase (MODO SÍNCRONO)."""
         try:
-            # Chamada Síncrona (bloqueante)
             response = (
                 self.supabase.table("player_pokemon")
                 .select("*")
                 .eq("player_id", player_id)
-                .not_("party_position", "is", "null")
+                .filter("party_position", "not.is", "null")  # ✅ substitui .not_()
                 .order("party_position", desc=False)
-                .execute() # Chamada direta
+                .execute()  # ✅ chamada correta para versão 2.x
             )
-            
-            return response.data
+
+            return response.data or []
+
         except Exception as e:
-            print(f"Erro ao buscar time no SupABASE (Sync): {e}")
+            print(f"Erro ao buscar time no Supabase (Sync): {e}")
             return []
+
 
     async def _get_focused_pokemon_details(self, p_mon_db: dict) -> dict:
         # Esta função (pokeapi_service) já é async (aiohttp), então está perfeita.
@@ -234,9 +236,6 @@ class TeamCog(commands.Cog):
     @commands.command(name="debugteam")
     @commands.is_owner()
     async def debug_team(self, ctx: commands.Context):
-        """
-        Executa uma varredura de debug na tabela player_pokemon (agora síncrono).
-        """
         player_id = ctx.author.id
         await ctx.send(f"--- 🔎 Iniciando Debug do Time para Player ID: `{player_id}` ---")
         
@@ -246,12 +245,12 @@ class TeamCog(commands.Cog):
             # ==================================
             
             # Teste 1: A consulta exata que o !team usa
-            await ctx.send(f"**TESTE 1:** Buscando Pokémon COM `.not_('party_position', 'is', 'null')`...")
+            await ctx.send(f"**TESTE 1:** Buscando Pokémon COM `.filter(\"party_position\", \"not.is\", \"null\")`...")
             response_with_not_null = (
                 self.supabase.table("player_pokemon")
                 .select("*")
                 .eq("player_id", player_id)
-                .not_("party_position", "is", "null")
+                .filter("party_position", "not.is", "null")  # <--- Correção do debug
                 .execute() # Chamada direta
             )
             
@@ -275,5 +274,4 @@ class TeamCog(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    """Registra o Cog no bot."""
     await bot.add_cog(TeamCog(bot))
