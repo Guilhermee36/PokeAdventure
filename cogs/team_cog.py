@@ -251,3 +251,42 @@ class TeamCog(commands.Cog):
 async def setup(bot: commands.Bot):
     """Registra o Cog no bot."""
     await bot.add_cog(TeamCog(bot))
+    
+    @commands.command(name="debugteam")
+    @commands.is_owner() # Apenas você (dono do bot) pode usar
+    async def debug_team(self, ctx: commands.Context):
+        """
+        Executa uma varredura de debug na tabela player_pokemon
+        para o seu ID de jogador.
+        """
+        player_id = ctx.author.id
+        await ctx.send(f"--- 🔎 Iniciando Debug do Time para Player ID: `{player_id}` ---")
+        
+        try:
+            # Teste 1: A consulta exata que o !team usa
+            await ctx.send(f"**TESTE 1:** Buscando Pokémon COM `not_is('party_position', 'null')`...")
+            response_with_not_null = await asyncio.to_thread(
+                self.supabase.table("player_pokemon")
+                .select("*")
+                .eq("player_id", player_id)
+                .not_is("party_position", "null")
+                .execute
+            )
+            
+            await ctx.send(f"**Resultado (Teste 1):**\n> Total encontrado: {len(response_with_not_null.data)}\n> ```json\n{response_with_not_null.data}\n```")
+
+            # Teste 2: Buscando TODOS os Pokémon do seu ID, sem filtro
+            await ctx.send(f"\n**TESTE 2:** Buscando TODOS os Pokémon para o seu ID (sem filtro de party)...")
+            response_all = await asyncio.to_thread(
+                self.supabase.table("player_pokemon")
+                .select("*")
+                .eq("player_id", player_id)
+                .execute
+            )
+            
+            await ctx.send(f"**Resultado (Teste 2):**\n> Total encontrado: {len(response_all.data)}\n> ```json\n{response_all.data}\n```")
+            
+            await ctx.send("\n--- ✅ Debug Concluído ---")
+
+        except Exception as e:
+            await ctx.send(f"**ERRO DURANTE O DEBUG:**\n> ```{e}```")
