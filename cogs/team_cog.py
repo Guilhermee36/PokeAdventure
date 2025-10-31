@@ -92,9 +92,6 @@ class TeamCog(commands.Cog):
     async def _get_player_team(self, player_id: int) -> list:
         """Busca o time completo (slots 1-6) do jogador no Supabase."""
         try:
-            # ==================================
-            # !!! CORREÇÃO APLICADA AQUI (lambda) !!!
-            # ==================================
             # Criamos o construtor da query primeiro
             builder = (
                 self.supabase.table("player_pokemon")
@@ -103,12 +100,16 @@ class TeamCog(commands.Cog):
                 .not_("party_position", "is", "null")
                 .order("party_position", desc=False)
             )
-            # Passamos um lambda que CHAMA .execute() para o to_thread
-            response = await asyncio.to_thread(lambda: builder.execute())
+            
+            # ==================================
+            # !!! CORREÇÃO APLICADA AQUI (sem lambda) !!!
+            # ==================================
+            # Passamos a *referência* do método .execute para o to_thread
+            response = await asyncio.to_thread(builder.execute)
             
             return response.data
         except Exception as e:
-            # O erro 'AttributeError' estava acontecendo aqui
+            # O erro "'...object is not callable" estava acontecendo aqui
             print(f"Erro ao buscar time no SupABASE: {e}")
             return []
 
@@ -229,7 +230,7 @@ class TeamCog(commands.Cog):
         
         try:
             # ==================================
-            # !!! CORREÇÃO APLICADA AQUI (lambda) !!!
+            # !!! CORREÇÃO APLICADA AQUI (sem lambda) !!!
             # ==================================
             
             # Teste 1: A consulta exata que o !team usa (CORRIGIDA)
@@ -240,7 +241,7 @@ class TeamCog(commands.Cog):
                 .eq("player_id", player_id)
                 .not_("party_position", "is", "null")
             )
-            response_with_not_null = await asyncio.to_thread(lambda: builder1.execute())
+            response_with_not_null = await asyncio.to_thread(builder1.execute)
             
             await ctx.send(f"**Resultado (Teste 1):**\n> Total encontrado: {len(response_with_not_null.data)}\n> ```json\n{json.dumps(response_with_not_null.data, indent=2)}\n```")
 
@@ -251,7 +252,7 @@ class TeamCog(commands.Cog):
                 .select("*")
                 .eq("player_id", player_id)
             )
-            response_all = await asyncio.to_thread(lambda: builder2.execute())
+            response_all = await asyncio.to_thread(builder2.execute)
             
             await ctx.send(f"**Resultado (Teste 2):**\n> Total encontrado: {len(response_all.data)}\n> ```json\n{json.dumps(response_all.data, indent=2)}\n```")
             
