@@ -1,4 +1,3 @@
-
 # cogs/team_cog.py
 import discord
 import os
@@ -93,20 +92,19 @@ class TeamCog(commands.Cog):
     async def _get_player_team(self, player_id: int) -> list:
         """Busca o time completo (slots 1-6) do jogador no Supabase."""
         try:
-            # Criamos o construtor da query primeiro
-            builder = (
+            # ==================================
+            # !!! CORREÇÃO APLICADA AQUI (Síncrono) !!!
+            # Removemos o asyncio.to_thread e chamamos .execute() diretamente.
+            # Isso vai "bloquear" o bot por uma fração de segundo, mas vai funcionar.
+            # ==================================
+            response = (
                 self.supabase.table("player_pokemon")
                 .select("*")
                 .eq("player_id", player_id)
                 .not_("party_position", "is", "null")
                 .order("party_position", desc=False)
+                .execute() # Chamada direta
             )
-            
-            # ==================================
-            # !!! CORREÇÃO APLICADA AQUI (sem lambda) !!!
-            # ==================================
-            # Passamos a *referência* do método .execute para o to_thread
-            response = await asyncio.to_thread(builder.execute)
             
             return response.data
         except Exception as e:
@@ -115,6 +113,7 @@ class TeamCog(commands.Cog):
             return []
 
     async def _get_focused_pokemon_details(self, p_mon_db: dict) -> dict:
+        # Esta função (pokeapi_service) já é async, então está ótima.
         api_data = await pokeapi.get_pokemon_data(p_mon_db['pokemon_api_name'])
         if not api_data:
             return None
@@ -134,6 +133,7 @@ class TeamCog(commands.Cog):
         }
         
     async def _build_team_embed(self, focused_pokemon_details: dict, full_team_db: list, focused_slot: int) -> discord.Embed:
+        # (Esta função permanece inalterada)
         db_data = focused_pokemon_details['db_data']
         api_data = focused_pokemon_details['api_data']
         
@@ -223,37 +223,36 @@ class TeamCog(commands.Cog):
     @commands.is_owner()
     async def debug_team(self, ctx: commands.Context):
         """
-        Executa uma varredura de debug na tabela player_pokemon
-        para o seu ID de jogador.
+        Executa uma varredura de debug na tabela player_pokemon (agora síncrono).
         """
         player_id = ctx.author.id
         await ctx.send(f"--- 🔎 Iniciando Debug do Time para Player ID: `{player_id}` ---")
         
         try:
             # ==================================
-            # !!! CORREÇÃO APLICADA AQUI (sem lambda) !!!
+            # !!! CORREÇÃO APLICADA AQUI (Síncrono) !!!
             # ==================================
             
-            # Teste 1: A consulta exata que o !team usa (CORRIGIDA)
+            # Teste 1: A consulta exata que o !team usa
             await ctx.send(f"**TESTE 1:** Buscando Pokémon COM `.not_('party_position', 'is', 'null')`...")
-            builder1 = (
+            response_with_not_null = (
                 self.supabase.table("player_pokemon")
                 .select("*")
                 .eq("player_id", player_id)
                 .not_("party_position", "is", "null")
+                .execute() # Chamada direta
             )
-            response_with_not_null = await asyncio.to_thread(builder1.execute)
             
             await ctx.send(f"**Resultado (Teste 1):**\n> Total encontrado: {len(response_with_not_null.data)}\n> ```json\n{json.dumps(response_with_not_null.data, indent=2)}\n```")
 
             # Teste 2: Buscando TODOS os Pokémon do seu ID, sem filtro
             await ctx.send(f"\n**TESTE 2:** Buscando TODOS os Pokémon para o seu ID (sem filtro de party)...")
-            builder2 = (
+            response_all = (
                 self.supabase.table("player_pokemon")
                 .select("*")
                 .eq("player_id", player_id)
+                .execute() # Chamada direta
             )
-            response_all = await asyncio.to_thread(builder2.execute)
             
             await ctx.send(f"**Resultado (Teste 2):**\n> Total encontrado: {len(response_all.data)}\n> ```json\n{json.dumps(response_all.data, indent=2)}\n```")
             
