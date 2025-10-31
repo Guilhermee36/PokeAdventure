@@ -8,8 +8,6 @@ import asyncio
 
 # Importa nossos helpers
 import utils.pokeapi_service as pokeapi
-# REMOVIDO: import utils.image_generator as img_gen
-# REMOVIDO: from io import BytesIO
 
 # --- HELPER: Barra de Progresso ---
 def _create_progress_bar(current: int, total: int, bar_length: int = 10) -> str:
@@ -17,14 +15,11 @@ def _create_progress_bar(current: int, total: int, bar_length: int = 10) -> str:
     if total == 0:
         return "[          ] 0/0"
     
-    # Garante que 'current' não seja maior que 'total' para a barra
     current = min(current, total)
-    
     percent = float(current) / total
     filled = int(bar_length * percent)
     empty = bar_length - filled
     
-    # Emojis de bloco (pode trocar por '■' e '□' se preferir)
     bar_filled = '🟩' 
     bar_empty = '⬛' 
     
@@ -45,20 +40,13 @@ class TeamNavigationView(ui.View):
         self._update_buttons()
 
     def _update_buttons(self):
-        """Atualiza o estado (ativo/inativo) dos botões de navegação."""
-        # Acessa os botões pelos nomes das funções
         self.previous_pokemon.disabled = self.current_slot == 1
         self.next_pokemon.disabled = self.current_slot == self.max_slot
 
     async def _send_updated_team_embed(self, interaction: discord.Interaction):
-        """
-        Função ATUALIZADA para enviar um EMBED em vez de uma IMAGEM.
-        """
-        # Deferimos a resposta para o Discord saber que estamos trabalhando
         await interaction.response.defer(ephemeral=False)
         
         try:
-            # 1. Obter dados do Pokémon focado
             focused_db_data = self.full_team_data_db[self.current_slot - 1]
             focused_pokemon = await self.cog._get_focused_pokemon_details(focused_db_data)
             
@@ -66,10 +54,8 @@ class TeamNavigationView(ui.View):
                 await interaction.followup.send("Erro ao buscar dados do Pokémon principal da PokeAPI.", ephemeral=True)
                 return
             
-            # 2. Construir o Embed (versão simplificada)
             embed = await self.cog._build_team_embed(focused_pokemon, self.full_team_data_db, self.current_slot)
             
-            # 3. Atualizar a View e editar a mensagem original
             self._update_buttons()
             await interaction.message.edit(content=None, embed=embed, view=self)
 
@@ -81,7 +67,6 @@ class TeamNavigationView(ui.View):
 
     @ui.button(label="<", style=discord.ButtonStyle.primary, row=0)
     async def previous_pokemon(self, interaction: discord.Interaction, button: ui.Button):
-        """Vai para o Pokémon anterior no time."""
         if self.current_slot > 1:
             self.current_slot -= 1
             await self._send_updated_team_embed(interaction)
@@ -90,7 +75,6 @@ class TeamNavigationView(ui.View):
 
     @ui.button(label=">", style=discord.ButtonStyle.primary, row=0)
     async def next_pokemon(self, interaction: discord.Interaction, button: ui.Button):
-        """Vai para o próximo Pokémon no time."""
         if self.current_slot < self.max_slot:
             self.current_slot += 1
             await self._send_updated_team_embed(interaction)
@@ -111,12 +95,16 @@ class TeamCog(commands.Cog):
                 self.supabase.table("player_pokemon")
                 .select("*")
                 .eq("player_id", player_id)
-                .not_is("party_position", "null")
+                # ==================================
+                # !!! CORREÇÃO APLICADA AQUI !!!
+                # ==================================
+                .not_("party_position", "is", "null") # Trocado de .not_is()
                 .order("party_position", desc=False)
                 .execute
             )
             return response.data
         except Exception as e:
+            # O erro 'AttributeError' estava acontecendo aqui
             print(f"Erro ao buscar time no SupABASE: {e}")
             return []
 
@@ -145,8 +133,7 @@ class TeamCog(commands.Cog):
         
     async def _build_team_embed(self, focused_pokemon_details: dict, full_team_db: list, focused_slot: int) -> discord.Embed:
         """
-        Constrói o Embed de detalhes do Pokémon, replicando o design da direita.
-        (Versão simplificada SEM os ícones do time no embed)
+        Constrói o Embed de detalhes do Pokémon (Versão simplificada)
         """
         db_data = focused_pokemon_details['db_data']
         api_data = focused_pokemon_details['api_data']
@@ -154,28 +141,23 @@ class TeamCog(commands.Cog):
         nickname = db_data['nickname'].capitalize()
         level = db_data['current_level']
         
-        # --- Cria o Embed Base ---
         embed = discord.Embed(
             title=f"{nickname} - LV{level}",
             description=f"_{focused_pokemon_details['flavor_text']}_",
-            color=discord.Color.blue() # TODO: Mudar a cor baseada no tipo principal
+            color=discord.Color.blue()
         )
         
-        # --- Thumbnail (Sprite Principal) ---
         if focused_pokemon_details['sprite_url']:
             embed.set_thumbnail(url=focused_pokemon_details['sprite_url'])
         
-        # --- Campos de HP e XP ---
         hp_bar = _create_progress_bar(db_data['current_hp'], db_data['max_hp'])
         
-        # Simulação de XP (BaseSupa.sql não tem max_xp)
         xp_total_level = 100 
         xp_bar = _create_progress_bar(db_data['current_xp'], xp_total_level) 
         
         embed.add_field(name="HP", value=hp_bar, inline=False)
         embed.add_field(name="XP", value=xp_bar, inline=False)
 
-        # --- Campo de Moves ---
         moves_list = []
         if db_data.get('moves'):
             for move_name in db_data['moves']:
@@ -187,7 +169,6 @@ class TeamCog(commands.Cog):
             
         embed.add_field(name="MOVES", value="\n".join(moves_list), inline=False)
 
-        # --- Rodapé ---
         species_name = api_data['name'].capitalize()
         pokedex_id = api_data['id']
         embed.set_footer(text=f"Slot {focused_slot}/{len(full_team_db)} | {species_name} (Pokedex #{pokedex_id})")
@@ -198,10 +179,6 @@ class TeamCog(commands.Cog):
     @commands.command(name="team", aliases=["time"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def team(self, ctx: commands.Context, slot: int = 1):
-        """
-        Mostra o time do jogador usando Embeds e botões de navegação.
-        (Substitui o comando que gerava imagem)
-        """
         player_id = ctx.author.id
         msg = await ctx.send(f"Buscando seu time, {ctx.author.display_name}... 🔍")
         
@@ -225,15 +202,11 @@ class TeamCog(commands.Cog):
                 await msg.edit(content="Erro ao buscar dados do Pokémon principal da PokeAPI.")
                 return
             
-            # --- GERA O EMBED ---
             embed = await self._build_team_embed(focused_pokemon, full_team_data_db, focused_slot)
-            
-            # --- GERA A VIEW (BOTÕES) ---
             view = TeamNavigationView(self, player_id, focused_slot, max_slot, full_team_data_db)
             
-            # Edita a mensagem de "carregando" com o resultado final
             await msg.edit(content=None, embed=embed, view=view)
-            view.message = msg # Armazena a referência da mensagem na view
+            view.message = msg
 
         except Exception as e:
             print(f"Erro no comando !team (embed): {e}")
@@ -241,16 +214,11 @@ class TeamCog(commands.Cog):
         
     @team.error
     async def team_error(self, ctx: commands.Context, error):
-        """Tratamento de erro para o comando team."""
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.send(f"Acalme-se, Treinador! Você pode checar seu time novamente em {error.retry_after:.1f} segundos.", delete_after=5)
         else:
             await ctx.send(f"Ocorreu um erro: {error}")
 
-
-async def setup(bot: commands.Bot):
-    """Registra o Cog no bot."""
-    await bot.add_cog(TeamCog(bot))
     
     @commands.command(name="debugteam")
     @commands.is_owner() # Apenas você (dono do bot) pode usar
@@ -263,13 +231,16 @@ async def setup(bot: commands.Bot):
         await ctx.send(f"--- 🔎 Iniciando Debug do Time para Player ID: `{player_id}` ---")
         
         try:
-            # Teste 1: A consulta exata que o !team usa
-            await ctx.send(f"**TESTE 1:** Buscando Pokémon COM `not_is('party_position', 'null')`...")
+            # Teste 1: A consulta exata que o !team usa (CORRIGIDA)
+            await ctx.send(f"**TESTE 1:** Buscando Pokémon COM `.not_('party_position', 'is', 'null')`...")
             response_with_not_null = await asyncio.to_thread(
                 self.supabase.table("player_pokemon")
                 .select("*")
                 .eq("player_id", player_id)
-                .not_is("party_position", "null")
+                # ==================================
+                # !!! CORREÇÃO APLICADA AQUI !!!
+                # ==================================
+                .not_("party_position", "is", "null") # Trocado de .not_is()
                 .execute
             )
             
@@ -290,3 +261,8 @@ async def setup(bot: commands.Bot):
 
         except Exception as e:
             await ctx.send(f"**ERRO DURANTE O DEBUG:**\n> ```{e}```")
+
+
+async def setup(bot: commands.Bot):
+    """Registra o Cog no bot."""
+    await bot.add_cog(TeamCog(bot))
