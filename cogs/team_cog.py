@@ -9,18 +9,21 @@ import asyncio
 
 # Importa nossos helpers
 import utils.pokeapi_service as pokeapi
-import utils.image_generator as img_gen
+import utils.image_generator as img_gen # O gerador novo
 
 class TeamNavigationView(ui.View):
-    def __init__(self, bot: commands.Bot, player_id: int, current_slot: int, max_slot: int, full_team_data_db: list):
-        super().__init__(timeout=600) # Timeout de 10 minutos
-        self.bot = bot
+    # VVV MUDANÇA VVV
+    # Agora recebemos o 'cog' inteiro, não só o 'bot'
+    def __init__(self, cog: commands.Cog, player_id: int, current_slot: int, max_slot: int, full_team_data_db: list):
+        super().__init__(timeout=600)
+        self.cog = cog # Armazena o cog
+        # ^^^ FIM DA MUDANÇA ^^^
+        
         self.player_id = player_id
         self.current_slot = current_slot
         self.max_slot = max_slot
-        self.full_team_data_db = full_team_data_db # Lista completa de dados do DB
+        self.full_team_data_db = full_team_data_db
         
-        # Conecta ao Supabase para uso nos botões
         url: str = os.environ.get("SUPABASE_URL")
         key: str = os.environ.get("SUPABASE_KEY")
         self.supabase: Client = create_client(url, key)
@@ -28,36 +31,26 @@ class TeamNavigationView(ui.View):
         self._update_buttons()
 
     def _update_buttons(self):
-        # Desabilita "Anterior" se estiver no primeiro slot
-        self.children[0].disabled = self.current_slot == 1 # children[0] é o botão "Anterior"
-        # Desabilita "Próximo" se estiver no último slot
-        self.children[1].disabled = self.current_slot == self.max_slot # children[1] é o botão "Próximo"
+        self.children[0].disabled = self.current_slot == 1
+        self.children[1].disabled = self.current_slot == self.max_slot
 
 
     async def _send_updated_team_image(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False, thinking=True) # Avisa que está processando
+        await interaction.response.defer(ephemeral=False, thinking=True)
 
         try:
-            # Encontra os dados do Pokémon focado na lista completa do DB
             focused_db_data = next((p for p in self.full_team_data_db if p['party_position'] == self.current_slot), None)
-            
             if not focused_db_data:
                 await interaction.followup.send("Erro: Pokémon selecionado não encontrado.", ephemeral=True)
                 return
 
-            # Buscar dados da PokeAPI (focado)
-            f_api_data = await pokeapi.get_pokemon_data(focused_db_data['pokemon_api_name'])
-            f_species_data = await pokeapi.get_pokemon_species_data(focused_db_data['pokemon_api_name'])
-            
-            if not f_api_data or not f_species_data:
-                 await interaction.followup.send("Erro ao buscar dados do Pokémon principal na PokeAPI.", ephemeral=True)
-                 return
-            
-            focused_pokemon = {
-                'db_data': focused_db_data,
-                'api_data': f_api_data,
-                'species_data': f_species_data
-            }
+            # VVV MUDANÇA VVV
+            # Usamos a nova função helper do cog para pegar TODOS os dados
+            focused_pokemon = await self.cog._get_focused_pokemon_details(focused_db_data)
+            if not focused_pokemon:
+                await interaction.followup.send("Erro ao buscar dados do Pokémon principal na PokeAPI.", ephemeral=True)
+                return
+            # ^^^ FIM DA MUDANÇA ^^^
             
             # Gerar a imagem
             image_buffer = await img_gen.create_team_image(focused_pokemon, self.full_team_data_db, self.current_slot)
@@ -74,7 +67,6 @@ class TeamNavigationView(ui.View):
             )
             embed.set_image(url=f"attachment://{file.filename}")
             
-            # Edita a mensagem original com a nova imagem e os botões atualizados
             await interaction.edit_original_response(embed=embed, attachments=[file], view=self)
 
         except Exception as e:
@@ -90,7 +82,7 @@ class TeamNavigationView(ui.View):
             
         if self.current_slot > 1:
             self.current_slot -= 1
-            self._update_buttons() # Atualiza estado dos botões
+            self._update_buttons()
             await self._send_updated_team_image(interaction)
 
 
@@ -102,18 +94,16 @@ class TeamNavigationView(ui.View):
 
         if self.current_slot < self.max_slot:
             self.current_slot += 1
-            self._update_buttons() # Atualiza estado dos botões
+            self._update_buttons()
             await self._send_updated_team_image(interaction)
 
     async def on_timeout(self):
-        # Desabilita os botões quando a view expira
         for item in self.children:
             item.disabled = True
         try:
-            # Edita a mensagem para desabilitar os botões
             await self.message.edit(view=self)
         except discord.NotFound:
-            pass # A mensagem pode ter sido deletada
+            pass 
 
 class TeamCog(commands.Cog):
     """Cog para gerenciar o time do jogador e exibir a nova imagem."""
@@ -125,17 +115,52 @@ class TeamCog(commands.Cog):
         self.supabase: Client = create_client(url, key)
         print("TeamCog carregado.")
 
+    # VVV NOVO HELPER VVV
+    async def _get_focused_pokemon_details(self, focused_db_data: dict) -> dict | None:
+        """Busca dados da API e calcula o XP para o Pokémon focado."""
+        try:
+            f_api_data = await pokeapi.get_pokemon_data(focused_db_data['pokemon_api_name'])
+            f_species_data = await pokeapi.get_pokemon_species_data(focused_db_data['pokemon_api_name'])
+            
+            if not f_api_data or not f_species_data:
+                return None 
+
+            # Lógica de Cálculo de XP
+            f_level = focused_db_data['current_level']
+            current_xp = focused_db_data['current_xp']
+            growth_rate_url = f_species_data['growth_rate']['url']
+            
+            # Precisamos do XP total para o nível ATUAL e o PRÓXIMO
+            xp_for_current_level = await pokeapi.get_total_xp_for_level(growth_rate_url, f_level)
+            xp_for_next_level = await pokeapi.get_total_xp_for_level(growth_rate_url, f_level + 1)
+            
+            # A "fatia" de XP total necessária para este nível
+            total_xp_in_this_level = xp_for_next_level - xp_for_current_level
+            # O quanto de XP o jogador já ganhou *dentro* deste nível
+            current_xp_in_this_level = current_xp - xp_for_current_level
+            
+            xp_percent = 0.0
+            if total_xp_in_this_level > 0:
+                # Garante que a % esteja entre 0 e 1 (min/max)
+                xp_percent = max(0, min(1, current_xp_in_this_level / total_xp_in_this_level))
+
+            return {
+                'db_data': focused_db_data,
+                'api_data': f_api_data,
+                'species_data': f_species_data,
+                'xp_percent': xp_percent,
+                'current_xp_raw': current_xp,
+                'xp_for_next_level_raw': xp_for_next_level
+            }
+        except Exception as e:
+            print(f"Erro em _get_focused_pokemon_details: {e}")
+            return None
+    # ^^^ FIM DO NOVO HELPER ^^^
+
+
     @commands.command(name='team', help='Mostra seu time Pokémon. Use !team [1-6] para focar.')
     async def team(self, ctx: commands.Context, focused_slot: int = 1):
-        """
-        Exibe o time do jogador.
-        Por padrão, foca no Pokémon da posição 1.
-        Use !team 2 para focar no Pokémon da posição 2, e assim por diante.
-        """
-        if not 1 <= focused_slot <= 6:
-            await ctx.send("Posição inválida. Escolha um número de 1 a 6.")
-            return
-
+        
         player_id = ctx.author.id
         msg = await ctx.send(f"Buscando seu time... 🔍")
 
@@ -151,35 +176,21 @@ class TeamCog(commands.Cog):
                 return
 
             full_team_data_db = response.data
-            max_slot = len(full_team_data_db) # Número total de Pokémon no time
+            max_slot = len(full_team_data_db)
             
-            # Ajusta focused_slot se for maior que o número de Pokémon
-            if focused_slot > max_slot:
-                focused_slot = 1 # Volta para o primeiro se o slot pedido não existir
+            if not 1 <= focused_slot <= max_slot:
+                focused_slot = 1 # Garante que o slot seja válido
             
-            # Encontra o Pokémon focado
-            focused_db_data = next((p for p in full_team_data_db if p['party_position'] == focused_slot), None)
-            
-            # Se ainda assim não encontrar (erro na lógica ou dados), pega o primeiro
-            if not focused_db_data:
-                focused_db_data = full_team_data_db[0]
-                focused_slot = focused_db_data['party_position']
+            focused_db_data = full_team_data_db[focused_slot - 1] # Pega pela posição na lista ordenada
 
-            # 2. Buscar dados da PokeAPI (focado)
+            # 2. Buscar dados da PokeAPI e XP (usando o helper)
             await msg.edit(content="Carregando dados da Pokédex... 📖")
             
-            f_api_data = await pokeapi.get_pokemon_data(focused_db_data['pokemon_api_name'])
-            f_species_data = await pokeapi.get_pokemon_species_data(focused_db_data['pokemon_api_name'])
+            focused_pokemon = await self._get_focused_pokemon_details(focused_db_data)
             
-            if not f_api_data or not f_species_data:
+            if not focused_pokemon:
                  await msg.edit(content="Erro ao buscar dados do Pokémon principal da PokeAPI.")
                  return
-            
-            focused_pokemon = {
-                'db_data': focused_db_data,
-                'api_data': f_api_data,
-                'species_data': f_species_data
-            }
             
             # 3. Gerar a Imagem Inicial
             await msg.edit(content="Desenhando seu time... 🎨")
@@ -198,11 +209,14 @@ class TeamCog(commands.Cog):
             )
             embed.set_image(url=f"attachment://{file.filename}")
             
-            view = TeamNavigationView(self.bot, player_id, focused_slot, max_slot, full_team_data_db)
+            # VVV MUDANÇA VVV
+            # Passamos 'self' (o cog) para a View
+            view = TeamNavigationView(self, player_id, focused_slot, max_slot, full_team_data_db)
+            # ^^^ FIM DA MUDANÇA ^^^
             
-            await msg.delete() # Deleta a mensagem de "carregando"
+            await msg.delete() 
             message = await ctx.send(embed=embed, file=file, view=view)
-            view.message = message # Armazena a mensagem para poder editá-la depois
+            view.message = message 
 
         except Exception as e:
             print(f"Erro no comando !team: {e}")
