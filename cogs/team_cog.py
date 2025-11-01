@@ -15,7 +15,7 @@ import utils.pokeapi_service as pokeapi
 def _create_progress_bar(
     current: int, 
     total: int, 
-    bar_length: int = 10, 
+    bar_length: int = 8, # <-- 1ª MUDANÇA: Alterado de 10 para 8
     emojis: tuple = ('🟩', '⬛')
 ) -> str:
     """Cria uma barra de progresso em texto com emojis customizáveis e porcentagem."""
@@ -201,7 +201,7 @@ class TeamCog(commands.Cog):
 
         # Se for nível máximo (infinito)
         if xp_prox_level == float('inf'):
-            xp_bar = f"[{xp_emojis[0] * 10}]\nNível Máximo"
+            xp_bar = f"[{xp_emojis[0] * 8}]\nNível Máximo" # <-- 2ª MUDANÇA: Alterado de 10 para 8
         else:
             # Total de XP necessário para *passar* deste nível
             total_xp_for_this_level = xp_prox_level - xp_base_level
