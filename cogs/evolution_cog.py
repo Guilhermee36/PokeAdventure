@@ -5,33 +5,16 @@ import os
 from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
-# MUDANÇA: Importamos get_pokemon_data para buscar stats base e a lista de ataques ao subir de nível
-from utils.pokeapi_service import get_pokemon_species_data, get_pokemon_data, get_data_from_url, get_total_xp_for_level, find_evolution_details, calculate_stats_for_level
+import asyncio # Importado para o helper de contexto
 
-# --- CLASSES DE UI ---
+# Importa os utilitários corretos
+import utils.pokeapi_service as pokeapi
+import utils.evolution_utils as evolution_utils # NOVO
 
-class EvolutionChoiceView(ui.View):
-    """View para o jogador escolher uma evolução quando há múltiplas opções."""
-    def __init__(self, pokemon_id: str, evolutions: list, evolution_cog):
-        super().__init__(timeout=300)
-        self.pokemon_id = pokemon_id
-        self.evolution_cog = evolution_cog
-        for evo in evolutions:
-            evo_name = evo['species']['name']
-            button = ui.Button(label=evo_name.capitalize(), custom_id=evo_name, style=discord.ButtonStyle.primary)
-            button.callback = self.button_callback
-            self.add_item(button)
-
-    async def button_callback(self, interaction: discord.Interaction):
-        chosen_evolution = interaction.data['custom_id']
-        await interaction.response.defer()
-        for item in self.children:
-            item.disabled = True
-        await interaction.edit_original_response(view=self)
-        await self.evolution_cog.evolve_pokemon(
-            interaction.user.id, self.pokemon_id, chosen_evolution, interaction.channel
-        )
-        self.stop()
+# --- CLASSES DE UI (MoveReplaceView) ---
+# (A View EvolutionChoiceView foi removida daqui, pois a lógica de level-up
+# agora é tratada inteiramente pelo evolution_utils, que retorna apenas UMA
+# evolução válida por vez, se houver).
 
 class MoveReplaceView(ui.View):
     """View para o jogador substituir um ataque quando a lista de 4 ataques está cheia."""
@@ -95,46 +78,35 @@ class EvolutionCog(commands.Cog):
 
     async def check_for_new_moves(self, pokemon: dict, new_level: int, channel):
         """Verifica e processa TODOS os novos ataques que um Pokémon aprende em um nível."""
-        pokemon_api_data = await get_pokemon_data(pokemon['pokemon_api_name'])
+        # (Esta função contém as correções da sua versão original e está mantida)
+        pokemon_api_data = await pokeapi.get_pokemon_data(pokemon['pokemon_api_name'])
         if not pokemon_api_data: return
 
         newly_learned_moves = []
         for move_info in pokemon_api_data['moves']:
-            move_name = move_info['move']['name'] # Pegamos o nome aqui
+            move_name = move_info['move']['name']
             for version_details in move_info['version_group_details']:
-                # CONDIÇÃO DE CORREÇÃO 1:
-                # Verificamos se o método é level-up, se o nível bate
-                # E (o mais importante) se o ataque JÁ NÃO ESTÁ na nossa lista
                 if (version_details['move_learn_method']['name'] == 'level-up' and
                     version_details['level_learned_at'] == new_level and
-                    move_name not in newly_learned_moves): # <-- Impede duplicatas
+                    move_name not in newly_learned_moves):
                     
                     newly_learned_moves.append(move_name)
-                    break # Otimização: Já encontramos esse ataque, não precisa checar outras versões
+                    break 
         
         if not newly_learned_moves:
             return
 
-        # CORREÇÃO 2:
-        # Removemos a busca de 'moves' daqui de fora...
-
         for move_name in newly_learned_moves:
-            # ...e colocamos ELA AQUI DENTRO.
-            # Isso garante que a CADA novo ataque que tentamos aprender,
-            # pegamos a lista mais ATUALIZADA do banco de dados.
             try:
                 response = self.supabase.table('player_pokemon').select('moves').eq('id', pokemon['id']).single().execute()
                 if not response.data: continue
                 current_moves = response.data['moves']
             except Exception as e:
                 print(f"Erro ao buscar moves atualizados em check_for_new_moves: {e}")
-                continue # Pula este ataque se não conseguir verificar
+                continue 
 
-            # Esta verificação agora usa a lista 'current_moves' fresca
             if move_name in current_moves:
                 continue
-
-            # Removemos a busca duplicada que existia aqui (linha 120 antiga)
 
             if None in current_moves:
                 empty_slot_index = current_moves.index(None)
@@ -147,116 +119,185 @@ class EvolutionCog(commands.Cog):
                     color=discord.Color.orange()
                 )
                 view = MoveReplaceView(pokemon['id'], move_name, current_moves, self)
-                await channel.send(embed=embed, view=view)
-                await view.wait() # O loop vai pausar aqui e, ao continuar, vai buscar a lista de moves nova na próxima iteração.
+                msg = await channel.send(embed=embed, view=view)
+                await view.wait()
+                try:
+                    await msg.edit(view=None) # Limpa os botões após a interação
+                except discord.NotFound:
+                    pass # Mensagem pode ter sido deletada
+
+    async def _get_game_context(self, player_id: int, pokemon_to_exclude_id: str) -> dict:
+        """
+        Busca dados complexos do jogo (tipos da party, localização, hora)
+        para passar ao verificador de evolução.
+        """
+        party_types = set()
+        location_name = None
+        time_of_day = "day" # TODO: Implementar um sistema de hora do jogo
+        
+        try:
+            # 1. Busca localização do jogador
+            player_res = self.supabase.table('players').select('current_location_name').eq('discord_id', player_id).single().execute()
+            if player_res.data:
+                location_name = player_res.data.get('current_location_name')
+
+            # 2. Busca o restante da party
+            party_res = self.supabase.table('player_pokemon') \
+                .select('pokemon_api_name') \
+                .eq('player_id', player_id) \
+                .neq('id', pokemon_to_exclude_id) \
+                .execute()
+
+            # 3. Coleta os tipos (isso pode ser lento, mas o cache do pokeapi ajuda)
+            if party_res.data:
+                api_tasks = []
+                for pkmn in party_res.data:
+                    api_tasks.append(pokeapi.get_pokemon_data(pkmn['pokemon_api_name']))
+                
+                results = await asyncio.gather(*api_tasks)
+                
+                for api_data in results:
+                    if api_data and 'types' in api_data:
+                        for type_info in api_data['types']:
+                            party_types.add(type_info['type']['name'])
+
+        except Exception as e:
+            print(f"Erro ao montar contexto de evolução: {e}")
+            
+        return {
+            "time_of_day": time_of_day,
+            "party_types": list(party_types),
+            "current_location_name": location_name
+        }
+
 
     async def check_for_level_up(self, pokemon: dict, channel):
         """Verifica se um Pokémon tem XP suficiente para subir de nível e atualiza stats."""
-        species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
+        species_data = await pokeapi.get_pokemon_species_data(pokemon['pokemon_api_name'])
         if not species_data: return
 
         growth_rate_url = species_data['growth_rate']['url']
         next_level = pokemon['current_level'] + 1
-        xp_needed = await get_total_xp_for_level(growth_rate_url, next_level)
+        xp_needed = await pokeapi.get_total_xp_for_level(growth_rate_url, next_level)
+        if xp_needed == float('inf'): # Já está no nível máximo
+             return 
 
         while pokemon['current_xp'] >= xp_needed:
             new_level = pokemon['current_level'] + 1
             try:
-                pokemon_api_data = await get_pokemon_data(pokemon['pokemon_api_name'])
+                pokemon_api_data = await pokeapi.get_pokemon_data(pokemon['pokemon_api_name'])
                 if not pokemon_api_data: break
 
-                recalculated_stats = calculate_stats_for_level(pokemon_api_data['stats'], new_level)
+                recalculated_stats = pokeapi.calculate_stats_for_level(pokemon_api_data['stats'], new_level)
                 
                 update_payload = {
                     'current_level': new_level,
                     **recalculated_stats
                 }
-
-                # CORREÇÃO: Atualiza o current_hp para o novo max_hp, restaurando a vida.
                 if 'max_hp' in recalculated_stats:
                     update_payload['current_hp'] = recalculated_stats['max_hp']
 
-                self.supabase.table('player_pokemon').update(update_payload).eq('id', pokemon['id']).execute()
+                # Atualiza o DB ANTES de enviar a mensagem
+                response = self.supabase.table('player_pokemon').update(update_payload).eq('id', pokemon['id']).execute()
+                if not response.data:
+                    break # Falha ao atualizar, interrompe o loop
                 
                 await channel.send(f"✨ **{pokemon['nickname']}** subiu para o **nível {new_level}**! Seus stats aumentaram!")
                 
+                # Atualiza o dict local para o próximo loop
                 pokemon['current_level'] = new_level
+                pokemon.update(recalculated_stats)
                 
                 await self.check_for_new_moves(pokemon, new_level, channel)
-                await self.check_evolution(pokemon, channel)
                 
-                xp_needed = await get_total_xp_for_level(growth_rate_url, new_level + 1)
+                # ========================================================
+                # <<< LÓGICA DE EVOLUÇÃO REFATORADA >>>
+                # ========================================================
+                
+                # 1. Monta o contexto complexo
+                game_context = await self._get_game_context(pokemon['player_id'], pokemon['id'])
+                
+                # 2. Chama o "Cérebro" Central
+                evo_result = await evolution_utils.check_evolution(
+                    supabase=self.supabase,
+                    pokemon_db_id=pokemon['id'],
+                    trigger_event="level_up",
+                    context=game_context
+                )
+                
+                if evo_result:
+                    # 3. Aplica a evolução
+                    await self.evolve_pokemon(pokemon['player_id'], pokemon['id'], evo_result['new_name'], channel)
+                    
+                    # 4. Interrompe o loop de level-up
+                    # A nova forma pode ter uma taxa de crescimento de XP diferente.
+                    # O check_for_level_up será chamado novamente na próxima vez que ganhar XP.
+                    break 
+                # ========================================================
+                # <<< FIM DA REFATORAÇÃO >>>
+                # ========================================================
+
+                # Busca o XP para o *próximo* nível
+                xp_needed = await pokeapi.get_total_xp_for_level(growth_rate_url, new_level + 1)
+                if xp_needed == float('inf'):
+                    break # Atingiu o nível máximo
+
             except Exception as e:
                 print(f"Erro ao atualizar nível e stats no DB: {e}")
                 break
 
+    # =================================================================
+    # FUNÇÃO CENTRALIZADA PARA *APLICAR* A EVOLUÇÃO
+    # =================================================================
     async def evolve_pokemon(self, discord_id: int, pokemon_db_id: str, new_pokemon_api_name: str, channel):
-        """Atualiza os dados de um Pokémon no DB após evoluir."""
-        # Esta função agora é chamada pelo ShopCog, por isso é importante
+        """
+        Atualiza os dados de um Pokémon no DB após evoluir.
+        Esta é a função central usada por todos os cogs.
+        """
         try:
-            # Pega o nível atual para recalcular os stats da nova forma
-            response = self.supabase.table('player_pokemon').select('current_level').eq('id', pokemon_db_id).single().execute()
+            # 1. Pega o nível e apelido atuais
+            response = self.supabase.table('player_pokemon').select('current_level, nickname, pokemon_api_name').eq('id', pokemon_db_id).single().execute()
             if not response.data: return
             
             level = response.data['current_level']
+            old_name = response.data['pokemon_api_name']
+            nickname = response.data['nickname']
+            
+            await channel.send(f"O que? **{nickname}** está evoluindo!")
 
-            # Pega os dados da API da nova forma evoluída
-            new_pokemon_api_data = await get_pokemon_data(new_pokemon_api_name)
+            # 2. Pega os dados da API da nova forma
+            new_pokemon_api_data = await pokeapi.get_pokemon_data(new_pokemon_api_name)
             if not new_pokemon_api_data: return
+            
+            new_api_id = new_pokemon_api_data['id'] # Pega o ID da Pokédex
 
-            # Recalcula os stats para a nova forma no mesmo nível
-            recalculated_stats = calculate_stats_for_level(new_pokemon_api_data['stats'], level)
+            # 3. Recalcula os stats para a nova forma no mesmo nível
+            recalculated_stats = pokeapi.calculate_stats_for_level(new_pokemon_api_data['stats'], level)
 
+            # 4. Monta o payload (resetando o HP e atualizando stats)
             update_payload = {
                 'pokemon_api_name': new_pokemon_api_name,
-                'nickname': new_pokemon_api_name.capitalize(),
+                'pokemon_pokedex_id': new_api_id,
                 **recalculated_stats
             }
             if 'max_hp' in recalculated_stats:
                 update_payload['current_hp'] = recalculated_stats['max_hp']
+            
+            # 5. Se o apelido era o nome antigo, atualiza o apelido
+            if nickname.lower() == old_name.lower():
+                update_payload['nickname'] = new_pokemon_api_name.capitalize()
 
+            # 6. Atualiza o DB
             self.supabase.table('player_pokemon').update(update_payload).eq('id', pokemon_db_id).execute()
 
-            await channel.send(f"🎉 <@{discord_id}>, seu Pokémon evoluiu para **{new_pokemon_api_name.capitalize()}**! 🎉")
+            await channel.send(f"🎉 <@{discord_id}>, seu **{nickname}** evoluiu para **{new_pokemon_api_name.capitalize()}**! 🎉")
         except Exception as e:
             print(f"Erro ao evoluir Pokémon: {e}")
-
-    async def check_evolution(self, pokemon: dict, channel):
-        """Verifica as condições de evolução para um Pokémon."""
-        species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
-        if not species_data or not species_data.get('evolution_chain'): return
-
-        evo_chain_url = species_data['evolution_chain']['url']
-        evo_chain_data = await get_data_from_url(evo_chain_url)
-        if not evo_chain_data: return
-
-        possible_evolutions = find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])
-        if not possible_evolutions: return
-
-        # Filtra evoluções por item (agora tratadas no !buy)
-        valid_evolutions = []
-        for evo in possible_evolutions:
-            trigger = evo['evolution_details'][0]['trigger']['name']
-            if trigger != 'use-item':
-                valid_evolutions.append(evo)
-        
-        if not valid_evolutions:
-            return # Nenhuma evolução válida (ex: Eevee só evolui por item)
-
-        if len(valid_evolutions) > 1:
-            view = EvolutionChoiceView(pokemon['id'], valid_evolutions, self)
-            await channel.send(f"Seu **{pokemon['nickname']}** está pronto para evoluir! Escolha seu caminho:", view=view)
-            return
-
-        next_evo = valid_evolutions[0]
-        evo_details = next_evo['evolution_details'][0]
-        trigger = evo_details['trigger']['name']
-        
-        if trigger == 'level-up':
-            min_level = evo_details.get('min_level')
-            if min_level is not None and pokemon['current_level'] >= min_level:
-                new_form = next_evo['species']['name']
-                await self.evolve_pokemon(pokemon['player_id'], pokemon['id'], new_form, channel)
+            await channel.send(f"Ocorreu um erro crítico durante a evolução.")
+    
+    # =================================================================
+    # <<< A FUNÇÃO check_evolution() FOI REMOVIDA DESTE ARQUIVO >>>
+    # =================================================================
     
     # --- COMANDOS DO JOGADOR ---
 
@@ -278,14 +319,13 @@ class EvolutionCog(commands.Cog):
             
             await ctx.send(f"Você deu {amount} XP para **{pokemon['nickname']}**. XP Total agora: {new_xp}.")
             
+            # Passa o dict atualizado para o checker
             pokemon['current_xp'] = new_xp
             await self.check_for_level_up(pokemon, ctx.channel)
         except Exception as e:
             await ctx.send(f"Ocorreu um erro inesperado ao dar XP.")
             print(f"Erro no comando !givexp: {e}")
 
-    # <<< !!! COMANDOS !SHOP E !BUY REMOVIDOS DESTE ARQUIVO !!! >>>
-    # A funcionalidade agora existe em cogs/shop_cog.py
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(EvolutionCog(bot))
