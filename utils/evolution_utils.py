@@ -3,9 +3,17 @@
 import utils.pokeapi_service as pokeapi
 from supabase import Client
 from postgrest import APIResponse
+import re # Usado no _get_species_id_from_url
 
 # Cache simples para armazenar dados da cadeia de evolução (URL -> dados)
 _evo_chain_cache = {}
+
+# Mapeamento de Gênero da API (ID) para o nosso DB (string)
+API_GENDER_MAP = {
+    1: 'female',
+    2: 'male',
+    3: 'genderless'
+}
 
 async def _get_evo_chain_data(url: str) -> dict | None:
     """Busca dados da cadeia de evolução com cache."""
@@ -30,7 +38,6 @@ def _find_evolution_node(chain: dict, pokemon_name: str) -> dict | None:
 
 def _get_species_id_from_url(url: str) -> int | None:
     """Extrai o ID da URL da espécie."""
-    import re
     match = re.search(r"/pokemon-species/(\d+)/", url)
     if match:
         return int(match.group(1))
@@ -39,7 +46,6 @@ def _get_species_id_from_url(url: str) -> int | None:
 def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) -> bool:
     """
     Verifica condições para evoluções do tipo 'level-up'.
-    Exemplos: Gligar (nível + item + noite), Togepi (nível + felicidade), Pancham (nível + tipo na party).
     """
     
     # Condição 1: Nível Mínimo
@@ -47,44 +53,68 @@ def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) ->
     if min_level and pkmn_data["current_level"] < min_level:
         return False # Não tem o nível mínimo
 
-    # Condição 2: Felicidade Mínima (Ex: Togepi -> Togetic, Chansey -> Blissey)
+    # Condição 2: Felicidade Mínima (Ex: Togepi -> Togetic)
     min_happiness = details.get("min_happiness")
     if min_happiness:
-        # REQUER QUE A COLUNA 'happiness' (int) EXISTA NA TABELA 'player_pokemon'
+        # REQUER 'happiness' (int) no DB
         if pkmn_data.get("happiness", 70) < min_happiness:
             return False
 
     # Condição 3: Item Segurado (Ex: Gligar -> Gliscor)
     held_item = details.get("held_item", {}).get("name")
     if held_item:
-        # REQUER QUE A COLUNA 'held_item' (text) EXISTA NA TABELA 'player_pokemon'
+        # REQUER 'held_item' (text) no DB
         if pkmn_data.get("held_item") != held_item:
             return False 
 
-    # Condição 4: Hora do Dia (Ex: Eevee -> Umbreon/Espeon, Gligar -> Gliscor)
+    # Condição 4: Hora do Dia (Ex: Eevee -> Umbreon/Espeon)
     time_of_day = details.get("time_of_day")
-    # O 'context' deve fornecer a hora atual do jogo (ex: 'day' ou 'night')
     if time_of_day and time_of_day != context.get("time_of_day"):
         return False # Hora errada
 
     # Condição 5: Conhecer um Ataque (Ex: Aipom -> Ambipom)
     known_move = details.get("known_move", {}).get("name")
     if known_move:
-        # 'moves' deve ser uma lista de nomes/IDs. Ex: ["tackle", "growl", ...]
         if known_move not in pkmn_data.get("moves", []):
             return False
     
     # Condição 6: Pokémon de um tipo específico na Equipe (Ex: Pancham -> Pangoro)
     party_type = details.get("party_type", {}).get("name")
     if party_type:
-        # O 'context' DEVE fornecer uma lista de tipos da party.
-        # Ex: context = {"party_types": ["normal", "flying", "dark"]}
         if party_type not in context.get("party_types", []):
             return False
     
-    # Condição 7: Inkay (Virar o console)
+    # === NOVAS CONDIÇÕES ADICIONADAS ===
+
+    # Condição 7: Gênero Específico (Ex: Combee ♀ -> Vespiquen)
+    gender_id = details.get("gender")
+    if gender_id:
+        required_gender = API_GENDER_MAP.get(gender_id)
+        # REQUER 'gender' (text: 'male'/'female') no DB
+        if pkmn_data.get("gender") != required_gender:
+            return False
+
+    # Condição 8: Stats Relativos (Ex: Tyrogue)
+    stat_comparison = details.get("relative_physical_stats")
+    if stat_comparison is not None:
+        atk = pkmn_data.get("attack", 0)
+        defense = pkmn_data.get("defense", 0)
+        if stat_comparison == 1 and not (atk > defense): # Atk > Def
+            return False
+        if stat_comparison == -1 and not (atk < defense): # Atk < Def
+            return False
+        if stat_comparison == 0 and not (atk == defense): # Atk = Def
+            return False
+
+    # Condição 9: Localização (Ex: Eevee -> Leafeon/Glaceon)
+    location = details.get("location", {}).get("name")
+    if location:
+        # REQUER 'current_location_name' (text) no 'players' DB
+        if context.get("current_location_name") != location:
+            return False
+
+    # Condição 10: Inkay (ignorado no level-up, tratado no item_use)
     if details.get("turn_upside_down", False):
-        # Tratado em 'item_use' com um item especial
         return False
         
     return True # Passou em todas as verificações de level_up
@@ -92,7 +122,6 @@ def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) ->
 def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict) -> bool:
     """
     Verifica condições para evoluções do tipo 'item_use'.
-    Exemplos: Eevee + Fire Stone, ou casos especiais como Inkay.
     """
     
     item_used = context.get("item_name")
@@ -102,11 +131,16 @@ def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict) ->
     # Condição 1: Item usado bate com o item esperado? (Ex: 'fire-stone')
     item_needed = details.get("item", {}).get("name")
     if item_needed and item_used == item_needed:
+        # (Adicionar checagens extras se houver, ex: gênero para Kirlia -> Gallade)
+        gender_id = details.get("gender")
+        if gender_id:
+            required_gender = API_GENDER_MAP.get(gender_id)
+            if pkmn_data.get("gender") != required_gender:
+                return False
         return True
         
     # Condição 2: Caso especial Inkay (turn_upside_down)
     # Mapeamos a flag 'turn_upside_down' para um item fictício 'topsy-turvy-scroll'
-    # E o Pokémon deve ter o nível mínimo
     min_level = details.get("min_level")
     if details.get("turn_upside_down", False) and item_used == "topsy-turvy-scroll":
         if min_level and pkmn_data["current_level"] >= min_level:
@@ -115,13 +149,11 @@ def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict) ->
              return True
 
     # Condição 3: Caso especial 'link-cable' (simula 'trade')
-    # Se o gatilho da API for 'trade', mas usamos o item 'link-cable'
     trigger_name = details.get("trigger", {}).get("name")
     if trigger_name == "trade" and item_used == "link-cable":
         # Verifica se há um item segurado necessário (ex: Onix + 'metal-coat')
         item_needed_to_hold = details.get("held_item", {}).get("name")
         if item_needed_to_hold:
-            # REQUER 'held_item' no banco de dados
             if pkmn_data.get("held_item") == item_needed_to_hold:
                 return True
         else:
@@ -146,9 +178,9 @@ async def check_evolution(
     Args:
         supabase: O cliente Supabase.
         pokemon_db_id: O ID ÚNICO (uuid) do Pokémon na tabela player_pokemon.
-        trigger_event: "level_up", "item_use", ou "trade".
+        trigger_event: "level_up" ou "item_use".
         context: Dados adicionais. 
-                 Para "level_up": {'time_of_day': 'day'/'night', 'party_types': ['dark', 'grass'], ...}
+                 Para "level_up": {'time_of_day': 'day', 'party_types': ['dark'], 'current_location_name': 'eterna-forest'}
                  Para "item_use": {'item_name': 'fire-stone'}
     """
     if context is None:
@@ -201,9 +233,7 @@ async def check_evolution(
             elif trigger_event == "item_use":
                 evolution_allowed = _check_item_use_conditions(details, context, pkmn)
             
-            elif trigger_event == "trade":
-                # Lógica de troca (ex: Karrablast/Shelmet) - Simplificado
-                evolution_allowed = True 
+            # (Gatilho 'trade' puro foi removido, agora é simulado por 'item_use')
 
             # 7. Se a evolução for permitida, retorna os dados!
             if evolution_allowed:
