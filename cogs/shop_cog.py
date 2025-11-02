@@ -5,11 +5,14 @@ from discord.ext import commands
 from discord import ui
 import os
 import aiohttp
-import asyncio # Importado para o listener on_ready
+import asyncio
 from supabase import create_client, Client
 from postgrest import APIResponse
 
-# --- Funções Auxiliares (Copiadas para modularidade) ---
+# IMPORTA O "CÉREBRO" DE EVOLUÇÃO
+import utils.evolution_utils as evolution_utils
+
+# --- Funções Auxiliares (Apenas Supabase) ---
 
 def get_supabase_client():
     """Cria e retorna um cliente Supabase."""
@@ -17,33 +20,10 @@ def get_supabase_client():
     key: str = os.environ.get("SUPABASE_KEY")
     return create_client(url, key)
 
-async def get_pokemon_species_data(pokemon_name: str):
-    """Busca dados da ESPÉCIE de um Pokémon da PokeAPI."""
-    url = f"https://pokeapi.co/api/v2/pokemon-species/{pokemon_name.lower()}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                return await response.json()
-            return None
-
-async def get_data_from_url(url: str):
-    """Busca dados de uma URL específica (ex: evolution_chain)."""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                return await response.json()
-            return None
-
-def find_evolution_details(chain_link: dict, current_species_name: str) -> list:
-    """Função auxiliar de pokeapi_service.py (copiada para modularidade)"""
-    if chain_link['species']['name'] == current_species_name:
-        return chain_link['evolves_to']
-    
-    for evolution in chain_link['evolves_to']:
-        found = find_evolution_details(evolution, current_species_name)
-        if found:
-            return found
-    return []
+# =================================================================
+# <<< FUNÇÕES DE API (get_species, get_data, find_details) REMOVIDAS >>>
+# Elas não são mais necessárias aqui.
+# =================================================================
 
 # --- Cog Class ---
 
@@ -57,12 +37,10 @@ class ShopCog(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         """Espera o bot estar pronto e busca o cog de evolução."""
-        # Damos um pequeno tempo para todos os cogs carregarem
         await asyncio.sleep(1) 
         
         evolution_cog = self.bot.get_cog("EvolutionCog")
         if evolution_cog:
-            # Armazena a referência da função evolve_pokemon
             self.evolve_pokemon_func = evolution_cog.evolve_pokemon
             print("ShopCog conectado ao EvolutionCog com sucesso.")
         else:
@@ -85,24 +63,17 @@ class ShopCog(commands.Cog):
             print(f"Erro ao atualizar dinheiro: {e}")
             return False
 
-    # =================================================================
-    # <<< CORREÇÃO APLICADA AQUI >>>
-    # =================================================================
     async def add_item_to_inventory(self, player_id: int, item_id: int, quantity: int = 1):
         """Adiciona um item ao inventário do jogador (upsert)."""
+        # (Mantendo sua lógica de upsert corrigida)
         try:
-            # 1. Tenta buscar o item (SEM .single())
             current_response = self.supabase.table('player_inventory') \
                 .select('quantity') \
                 .eq('player_id', player_id) \
                 .eq('item_id', item_id) \
                 .execute()
 
-            # current_response.data agora será [] (vazio) se o item não existe,
-            # ou [{'quantity': 5}] se ele existe.
-
             if current_response.data:
-                # Se a lista NÃO está vazia, o item existe.
                 current_quantity = current_response.data[0]['quantity']
                 new_quantity = current_quantity + quantity
                 
@@ -112,23 +83,17 @@ class ShopCog(commands.Cog):
                     .eq('item_id', item_id) \
                     .execute()
             else:
-                # Se a lista ESTÁ vazia, o item não existe. Insere um novo.
                 self.supabase.table('player_inventory') \
                     .insert({'player_id': player_id, 'item_id': item_id, 'quantity': quantity}) \
                     .execute()
-            
-            return True # Sucesso em ambos os casos
-            
+            return True
         except Exception as e:
             print(f"Erro ao adicionar item ao inventário: {e}")
             return False
-    # =================================================================
-    # <<< FIM DA CORREÇÃO >>>
-    # =================================================================
 
     @commands.command(name='shop', help='Mostra a loja de itens.')
     async def shop(self, ctx: commands.Context):
-        """Mostra uma loja com itens do banco de dados."""
+        # ... (Código do !shop sem alterações) ...
         try:
             response = self.supabase.table('items').select('*').in_('type', ['evolution', 'utility']).execute()
             if not response.data:
@@ -139,7 +104,6 @@ class ShopCog(commands.Cog):
             embed.description = "Use `!buy \"Nome do Item\" [Nome do Pokémon]`."
             
             for item in response.data:
-                # O effect_tag agora armazena o preço
                 try:
                     price = int(item['effect_tag'].split(':')[-1])
                     price_str = f"${price:,}"
@@ -154,9 +118,8 @@ class ShopCog(commands.Cog):
 
     @commands.command(name='bag', help='Mostra seu inventário.')
     async def bag(self, ctx: commands.Context):
-        """Exibe o inventário do jogador."""
+        # ... (Código do !bag sem alterações) ...
         try:
-            # Faz um JOIN para pegar os nomes dos itens
             response = self.supabase.table('player_inventory') \
                 .select('quantity, items(name, description)') \
                 .eq('player_id', ctx.author.id) \
@@ -213,53 +176,52 @@ class ShopCog(commands.Cog):
                     await ctx.send("Erro: O sistema de evolução não está online. Tente novamente mais tarde.")
                     return
 
-                # Lógica de evolução (baseada no evolution_cog.py)
-                pokemon_res = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_name.strip()).single().execute()
+                # ========================================================
+                # <<< LÓGICA DE EVOLUÇÃO REFATORADA >>>
+                # ========================================================
+                
+                # 1. Encontra o Pokémon
+                pokemon_res = self.supabase.table('player_pokemon').select('id').eq('player_id', ctx.author.id).ilike('nickname', pokemon_name.strip()).single().execute()
                 if not pokemon_res.data:
                     await ctx.send(f"Não encontrei um Pokémon chamado `{pokemon_name}` na sua equipe.")
                     return
 
-                pokemon = pokemon_res.data
-                species_data = await get_pokemon_species_data(pokemon['pokemon_api_name'])
-                if not species_data or not species_data.get('evolution_chain'):
-                    await ctx.send(f"**{pokemon_name}** não parece poder evoluir.")
-                    return
+                pokemon_db_id = pokemon_res.data['id']
 
-                evo_chain_url = species_data['evolution_chain']['url']
-                evo_chain_data = await get_data_from_url(evo_chain_url)
-                possible_evolutions = find_evolution_details(evo_chain_data['chain'], pokemon['pokemon_api_name'])
+                # 2. Monta o contexto (normaliza o nome do item)
+                item_api_name = item['name'].lower().replace(' ', '-')
+                context = {"item_name": item_api_name}
                 
-                found_match = False
-                for evo in possible_evolutions:
-                    details = evo['evolution_details'][0]
-                    # Compara o nome do item da API com o nome do item no nosso DB
-                    if details['trigger']['name'] == 'use-item' and details.get('item') and details['item']['name'] == item['name'].lower().replace(' ', '-'):
-                        new_form = evo['species']['name']
-                        
-                        # Debita o dinheiro
-                        await self.update_player_money(ctx.author.id, current_money - item_price)
-                        # Evolui o Pokémon
-                        await self.evolve_pokemon_func(ctx.author.id, pokemon['id'], new_form, ctx.channel)
-                        
-                        await ctx.send(f"Você gastou ${item_price:,} no item **{item_name}**.")
-                        found_match = True
-                        break
-                
-                if not found_match:
+                # 3. Chama o "Cérebro" Central
+                evo_result = await evolution_utils.check_evolution(
+                    supabase=self.supabase,
+                    pokemon_db_id=pokemon_db_id,
+                    trigger_event="item_use",
+                    context=context
+                )
+
+                if evo_result:
+                    # 4. Pagamento e Evolução
+                    await self.update_player_money(ctx.author.id, current_money - item_price)
+                    await self.evolve_pokemon_func(ctx.author.id, pokemon_db_id, evo_result['new_name'], ctx.channel)
+                    await ctx.send(f"Você gastou ${item_price:,} no item **{item['name']}**.")
+                else:
                     await ctx.send(f"O item **{item_name}** não parece ter efeito em **{pokemon_name}**.")
+                
+                # ========================================================
+                # <<< FIM DA REFATORAÇÃO >>>
+                # ========================================================
 
             # --- TIPO 2: Item Armazenável (Guarda no inventário) ---
             elif item_type == 'STORABLE':
-                # Debita o dinheiro
+                # ... (Código de item armazenável sem alterações) ...
                 success_money = await self.update_player_money(ctx.author.id, current_money - item_price)
                 if not success_money:
                     await ctx.send("Ocorreu um erro ao processar seu pagamento.")
                     return
                 
-                # Adiciona ao inventário
                 success_item = await self.add_item_to_inventory(ctx.author.id, item_id, 1)
                 if not success_item:
-                    # Tenta devolver o dinheiro
                     await self.update_player_money(ctx.author.id, current_money)
                     await ctx.send("Ocorreu um erro ao guardar o item no seu inventário. Seu dinheiro foi devolvido.")
                     return
@@ -273,32 +235,21 @@ class ShopCog(commands.Cog):
             await ctx.send(f"Ocorreu um erro inesperado no comando !buy.")
             print(f"Erro no comando !buy (ShopCog): {e}")
 
-    # =================================================================
-    # <<< COMANDO GIVE MONEY (Permanece igual) >>>
-    # =================================================================
     @commands.command(name='givemoney', help='(Admin) Adiciona dinheiro ao seu perfil.')
     @commands.is_owner()
     async def give_money(self, ctx: commands.Context, amount: int):
-        """(Admin) Dá dinheiro para o jogador."""
+        # ... (Código do !givemoney sem alterações) ...
         if amount <= 0:
             await ctx.send("A quantia deve ser um número positivo.")
             return
-
         try:
-            # 1. Pega o dinheiro atual
             current_money = await self.get_player_money(ctx.author.id)
-            
-            # 2. Calcula o novo total
             new_amount = current_money + amount
-            
-            # 3. Atualiza no banco de dados
             success = await self.update_player_money(ctx.author.id, new_amount)
-            
             if success:
                 await ctx.send(f"💸 Você adicionou ${amount:,} à sua conta! Novo saldo: ${new_amount:,}.")
             else:
                 await ctx.send("Falha ao atualizar o dinheiro no banco de dados.")
-        
         except Exception as e:
             await ctx.send(f"Ocorreu um erro inesperado: {e}")
             print(f"Erro no !givemoney: {e}")
