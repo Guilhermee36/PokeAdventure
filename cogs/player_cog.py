@@ -1,27 +1,25 @@
+# cogs/player_cog.py
+
 import discord
 from discord.ext import commands
 from discord import ui
 import random
-import aiohttp
+# import aiohttp # REMOVIDO: Usaremos o service
 from supabase import create_client, Client
 import os
 
 # =================================================================
-# ALTERAÇÃO 1: Reimportando a função de buscar ataques
-# Assumindo que este arquivo e a função existem no seu projeto.
-# from utils.pokeapi_service import get_initial_moves 
+# ALTERAÇÃO 1: Imports centralizados
 # =================================================================
+import utils.pokeapi_service as pokeapi
+import utils.evolution_utils as evolution_utils # NOVO: Importa o utilitário de evolução
 
 # --- Helper Functions ---
 
-async def fetch_pokemon_data(pokemon_name: str):
-    """Busca dados de um Pokémon da PokeAPI."""
-    url = f"https://pokeapi.co/api/v2/pokemon/{pokemon_name.lower()}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                return await response.json()
-            return None
+# =================================================================
+# ALTERAÇÃO 2: Função 'fetch_pokemon_data' removida
+# A função 'pokeapi.get_pokemon_data()' substitui isso.
+# =================================================================
 
 def get_supabase_client():
     """Cria e retorna um cliente Supabase."""
@@ -30,49 +28,19 @@ def get_supabase_client():
     return create_client(url, key)
 
 # =================================================================
-# ALTERAÇÃO 2: Função de ataques corrigida para padronizar 4 slots
+# ALTERAÇÃO 3: Função 'get_initial_moves' removida
+# A função 'pokeapi.get_initial_moves()' substitui esta.
 # =================================================================
-def get_initial_moves(pokemon_data, level):
-    """Mockup: Pega até 4 ataques aprendidos até o nível 5."""
-    moves = set() # <<< MUDANÇA: Usar um set para evitar duplicatas
-
-    # Ordena os ataques pelo nível em que são aprendidos
-    sorted_moves = sorted(
-        pokemon_data['moves'], 
-        key=lambda m: min(
-            (vg['level_learned_at'] for vg in m['version_group_details'] if vg['move_learn_method']['name'] == 'level-up' and vg['level_learned_at'] > 0), 
-            default=float('inf')
-        )
-    )
-
-    for move_data in sorted_moves:
-        if len(moves) >= 4:
-            break # Já temos 4 ataques
-
-        for version_group in move_data['version_group_details']:
-            if version_group['move_learn_method']['name'] == 'level-up' and 0 < version_group['level_learned_at'] <= level:
-                moves.add(move_data['move']['name'])
-                break # Ataque adicionado, ir para o próximo da lista de ataques
-    
-    final_moves = list(moves)
-    
-    # <<< MUDANÇA: Garante que a lista tenha 4 elementos, preenchendo com None
-    while len(final_moves) < 4:
-        final_moves.append(None)
-    
-    # Retorna os 4 primeiros ou um ataque padrão se a lista estiver vazia
-    if not final_moves:
-        return ["tackle", None, None, None] 
-        
-    return final_moves[:4] # Garante que tenhamos exatamente 4 slots
-
 
 # =================================================================
-# ALTERAÇÃO 3: Atualizando a função central para incluir HP Máximo e Nickname
+# ALTERAÇÃO 4: 'add_pokemon_to_player' reescrita para usar
+# 'pokeapi_service' para stats completos e ataques.
 # =================================================================
 async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: int = 5, captured_at: str = "Início da Jornada") -> dict:
-    """Função centralizada que agora também adiciona os ataques iniciais."""
+    """Função centralizada que adiciona um Pokémon com stats e ataques iniciais."""
     supabase = get_supabase_client()
+    
+    # 1. Verifica se o time está cheio
     try:
         count_response = supabase.table("player_pokemon").select("id", count='exact').eq("player_id", player_id).execute()
         pokemon_count = count_response.count
@@ -82,34 +50,48 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
     if pokemon_count >= 6:
         return {'success': False, 'error': "Seu time já está cheio! Você não pode carregar mais de 6 Pokémon."}
         
-    poke_data = await fetch_pokemon_data(pokemon_api_name)
+    # 2. Busca dados da PokeAPI
+    poke_data = await pokeapi.get_pokemon_data(pokemon_api_name)
     if not poke_data:
         return {'success': False, 'error': f"Pokémon '{pokemon_api_name}' não encontrado na API."}
     
-    # Lógica para HP, Shiny, Posição...
-    base_hp = poke_data['stats'][0]['base_stat']
-    # <<< MUDANÇA: Renomeado para clareza
-    calculated_max_hp = int((2 * base_hp * level) / 100) + level + 10 
-    is_shiny = random.randint(1, 100) == 1
+    # 3. Lógica de Posição, Shiny, etc.
+    is_shiny = random.randint(1, 4096) == 1 # Chance real de shiny
     party_position = pokemon_count + 1
     
-    # >>> BUSCA E ADICIONA OS ATAQUES AQUI <<<
-    initial_moves = get_initial_moves(poke_data, level)
+    # 4. Calcula todos os stats usando o utilitário
+    # Isso retorna um dict: {'max_hp': X, 'attack': Y, 'defense': Z, ...}
+    calculated_stats = pokeapi.calculate_stats_for_level(poke_data['stats'], level)
 
+    # 5. Busca os ataques iniciais usando o utilitário
+    initial_moves = pokeapi.get_initial_moves(poke_data, level)
+
+    # 6. Monta o objeto final para o Supabase
     new_pokemon_data = { 
         "player_id": player_id, 
         "pokemon_api_name": pokemon_api_name, 
-        "nickname": pokemon_api_name.capitalize(), # <<< MUDANÇA: Adiciona o Nickname (Corrige Erro 1 e 3)
+        "pokemon_pokedex_id": poke_data['id'], # NOVO: Salva o ID da Pokédex
+        "nickname": pokemon_api_name.capitalize(),
         "captured_at_location": captured_at, 
         "is_shiny": is_shiny, 
         "party_position": party_position, 
         "current_level": level, 
-        "current_hp": calculated_max_hp, # <<< MUDANÇA: Define o HP atual
-        "max_hp": calculated_max_hp,     # <<< MUDANÇA: Define o HP máximo (Corrige Erro 2)
+        "current_hp": calculated_stats['max_hp'], # Define o HP atual como o máximo
         "current_xp": 0,
-        "moves": initial_moves # Adiciona a lista de ataques ao registro
+        "moves": initial_moves,
+        
+        # Adiciona todos os stats calculados
+        **calculated_stats 
+        # Isso irá desempacotar o dict para:
+        # "max_hp": ...,
+        # "attack": ...,
+        # "defense": ...,
+        # "special_attack": ...,
+        # "special_defense": ...,
+        # "speed": ...
     }
     
+    # 7. Insere no banco de dados
     try:
         insert_response = supabase.table("player_pokemon").insert(new_pokemon_data).execute()
         if len(insert_response.data) > 0:
@@ -120,6 +102,8 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
         return {'success': False, 'error': f"Erro no banco de dados: {e}"}
 
 # --- Classes de UI (O restante do código permanece o mesmo) ---
+# ... (StartJourneyView, TrainerNameModal, StarterSelectView, etc. continuam aqui) ...
+# (Vou omiti-las para encurtar a resposta, mas elas devem permanecer no seu arquivo)
 
 class StartJourneyView(ui.View):
     def __init__(self, supabase_client: Client):
@@ -162,16 +146,32 @@ class StarterSelectView(ui.View):
         starter_name = interaction.data['custom_id']
         for item in self.children: item.disabled = True
         await interaction.response.edit_message(view=self)
-        result = await add_pokemon_to_player(player_id=interaction.user.id, pokemon_api_name=starter_name, level=5, captured_at=f"Recebido em {self.region}")
+        
+        # Chama a nova função 'add_pokemon_to_player'
+        result = await add_pokemon_to_player(
+            player_id=interaction.user.id, 
+            pokemon_api_name=starter_name, 
+            level=5, 
+            captured_at=f"Recebido em {self.region}"
+        )
+        
         if result['success']:
             pokemon_data = result['data']
             is_shiny = pokemon_data.get('is_shiny', False)
             shiny_text = "\n\n✨ **UAU, ELE É SHINY! QUE SORTE!** ✨" if is_shiny else ""
-            public_embed = discord.Embed(title="Uma Nova Jornada Começa!", description=f"{interaction.user.mention} iniciou sua aventura e escolheu **{starter_name.capitalize()}** como seu primeiro parceiro!{shiny_text}", color=discord.Color.green())
-            poke_api_data = await fetch_pokemon_data(starter_name)
+            
+            public_embed = discord.Embed(
+                title="Uma Nova Jornada Começa!", 
+                description=f"{interaction.user.mention} iniciou sua aventura e escolheu **{starter_name.capitalize()}** como seu primeiro parceiro!{shiny_text}", 
+                color=discord.Color.green()
+            )
+            
+            # Usando 'pokeapi' para buscar o sprite
+            poke_api_data = await pokeapi.get_pokemon_data(starter_name) 
             if poke_api_data:
                 sprite_url = poke_api_data['sprites']['front_shiny'] if is_shiny else poke_api_data['sprites']['front_default']
                 public_embed.set_thumbnail(url=sprite_url)
+            
             await interaction.followup.send(embed=public_embed)
         else:
             await interaction.followup.send(f"Ocorreu um erro ao adicionar seu Pokémon: {result['error']}", ephemeral=True)
@@ -189,13 +189,21 @@ class RegionSelectView(ui.View):
         discord_id = interaction.user.id
         player_data = {'discord_id': discord_id, 'trainer_name': self.trainer_name, 'current_region': region}
         try:
-            self.supabase.table('players').insert(player_data).execute()
+            # Verifica se o jogador já existe
+            existing = self.supabase.table('players').select('discord_id').eq('discord_id', discord_id).execute()
+            if not existing.data:
+                self.supabase.table('players').insert(player_data).execute()
+            else:
+                # Se já existir, apenas atualiza (ou ignora)
+                self.supabase.table('players').update(player_data).eq('discord_id', discord_id).execute()
+
             starter_embed = discord.Embed(title=f"Bem-vindo(a) a {region}!", description="Agora, a escolha mais importante: quem será seu parceiro inicial?", color=discord.Color.blue())
             await interaction.followup.send(embed=starter_embed, view=StarterSelectView(region=region), ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"Ocorreu um erro ao salvar seus dados: {e}", ephemeral=True)
         self.stop()
-
+    
+    # ... (Botões de Região - Kanto, Johto, etc.) ...
     @ui.button(label="Kanto", style=discord.ButtonStyle.primary, emoji="1️⃣", row=0)
     async def kanto(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Kanto")
     @ui.button(label="Johto", style=discord.ButtonStyle.primary, emoji="2️⃣", row=0)
@@ -215,6 +223,7 @@ class RegionSelectView(ui.View):
     @ui.button(label="Paldea", style=discord.ButtonStyle.primary, emoji="9️⃣", row=2)
     async def paldea(self, interaction: discord.Interaction, button: ui.Button): await self.select_region(interaction, "Paldea")
 
+
 class ConfirmDeleteView(ui.View):
     def __init__(self, supabase_client: Client):
         super().__init__(timeout=60)
@@ -225,6 +234,9 @@ class ConfirmDeleteView(ui.View):
         for item in self.children: item.disabled = True
         await interaction.response.edit_message(view=self)
         try:
+            # Excluir também os Pokémon do jogador
+            self.supabase.table('player_pokemon').delete().eq('player_id', interaction.user.id).execute()
+            # Excluir o jogador
             self.supabase.table('players').delete().eq('discord_id', interaction.user.id).execute()
             await interaction.followup.send("Sua jornada foi reiniciada. Todo o progresso foi excluído. Use `!start` para começar de novo.", ephemeral=True)
         except Exception as e:
@@ -249,6 +261,59 @@ class PlayerCog(commands.Cog):
         response = self.supabase.table('players').select('discord_id').eq('discord_id', discord_id).execute()
         return bool(response.data)
 
+    # =================================================================
+    # NOVA FUNÇÃO HELPER: Processar a Evolução
+    # =================================================================
+    async def process_evolution(self, ctx: commands.Context, pokemon_db_id: str, current_level: int, evo_result: dict):
+        """
+        Atualiza o Pokémon no banco de dados para sua nova forma.
+        """
+        new_name = evo_result["new_name"]
+        new_api_id = evo_result["new_api_id"]
+        
+        await ctx.send(f"O que? {evo_result['old_name'].capitalize()} está evoluindo!")
+        
+        try:
+            # 1. Buscar dados da nova espécie
+            new_pokemon_data = await pokeapi.get_pokemon_data(new_name)
+            if not new_pokemon_data:
+                await ctx.send("Erro: Não foi possível buscar dados da nova evolução.")
+                return
+
+            # 2. Recalcular stats para o nível ATUAL
+            new_stats = pokeapi.calculate_stats_for_level(new_pokemon_data['stats'], current_level)
+
+            # 3. Montar dados de atualização
+            # A evolução cura o Pokémon
+            update_data = {
+                "pokemon_api_name": new_name,
+                "pokemon_pokedex_id": new_api_id,
+                "nickname": new_name.capitalize(), # Reseta o nickname (ou podemos mantê-lo)
+                "current_hp": new_stats['max_hp'], # Cura total na evolução
+                **new_stats # Atualiza todos os stats
+            }
+
+            # 4. Atualizar no Supabase
+            response = (
+                self.supabase.table("player_pokemon")
+                .update(update_data)
+                .eq("id", pokemon_db_id)
+                .execute()
+            )
+
+            if response.data:
+                old_name_cap = evo_result["old_name"].capitalize()
+                new_name_cap = new_name.capitalize()
+                await ctx.send(f"🎉 Parabéns, {ctx.author.mention}! Seu {old_name_cap} evoluiu para {new_name_cap}!")
+            else:
+                await ctx.send("Ocorreu um erro ao salvar a evolução no banco de dados.")
+
+        except Exception as e:
+            print(f"Erro em process_evolution: {e}")
+            await ctx.send("Ocorreu um erro crítico durante a evolução.")
+            
+    # --- Comandos do Jogador ---
+
     @commands.command(name='start')
     async def start_adventure(self, ctx: commands.Context):
         if await self.player_exists(ctx.author.id):
@@ -259,6 +324,7 @@ class PlayerCog(commands.Cog):
 
     @commands.command(name='profile')
     async def profile(self, ctx: commands.Context):
+        # ... (código existente do profile) ...
         try:
             player = self.supabase.table('players').select('*').eq('discord_id', ctx.author.id).single().execute().data
             if not player:
@@ -273,18 +339,6 @@ class PlayerCog(commands.Cog):
         except Exception as e:
             await ctx.send(f"Ocorreu um erro ao buscar seu perfil: {e}")
 
-    @commands.command(name='addpokemon')
-    @commands.is_owner()
-    async def add_pokemon(self, ctx: commands.Context, pokemon_name: str, level: int = 5):
-        if not await self.player_exists(ctx.author.id):
-            await ctx.send(f"Você precisa iniciar sua jornada primeiro! Use `!start`.")
-            return
-        result = await add_pokemon_to_player(player_id=ctx.author.id, pokemon_api_name=pokemon_name, level=level, captured_at="Comando de Admin")
-        if result['success']:
-            await ctx.send(f"✅ {pokemon_name.capitalize()} foi adicionado ao seu time! {result['message']}")
-        else:
-            await ctx.send(f"❌ Erro: {result['error']}")
-
     @commands.command(name='delete')
     async def delete_journey(self, ctx: commands.Context):
         if not await self.player_exists(ctx.author.id):
@@ -295,14 +349,104 @@ class PlayerCog(commands.Cog):
 
     @commands.command(name='help')
     async def custom_help(self, ctx: commands.Context):
+        # ... (código existente do help) ...
         embed = discord.Embed(title="Ajuda do PokeAdventure", description="Comandos para sua jornada.", color=discord.Color.orange())
         embed.add_field(name="`!start`", value="Inicia sua aventura e cria seu personagem.", inline=False)
         embed.add_field(name="`!profile`", value="Exibe seu perfil de treinador.", inline=False)
         embed.add_field(name="`!team`", value="Mostra sua equipe de Pokémon.", inline=False)
+        embed.add_field(name="`!use <item> on <pokemon>`", value="Usa um item em um Pokémon (Ex: !use Fire Stone on Eevee).", inline=False) # NOVO
         embed.add_field(name="`!delete`", value="Apaga seu progresso para começar de novo.", inline=False)
         if await self.bot.is_owner(ctx.author):
             embed.add_field(name="--- Comandos de Administrador ---", value="`!addpokemon <nome> [level]`", inline=False)
         await ctx.send(embed=embed)
+        
+    # =================================================================
+    # NOVO COMANDO: !use
+    # =================================================================
+    @commands.command(name="use", help="Usa um item em um Pokémon.")
+    async def use_item(self, ctx: commands.Context, *, args: str):
+        """Usa um item. Formato: !use <item_name> on <pokemon_identifier>"""
+        try:
+            item_name, pokemon_identifier = args.split(" on ", 1)
+            item_name = item_name.strip()
+            pokemon_identifier = pokemon_identifier.strip()
+        except ValueError:
+            await ctx.send("Formato incorreto. Use: `!use <nome do item> on <nome ou apelido do pokémon>`")
+            return
+
+        # 1. (LÓGICA DE INVENTÁRIO - PENDENTE)
+        # Aqui, você deve verificar se o jogador tem o 'item_name' no inventário.
+        # Por enquanto, vamos presumir que ele tem.
+        
+        # 2. Encontrar o Pokémon (Lidando com o bug de nomes duplicados)
+        # Esta busca encontra pelo 'nickname' (que pode ser único) ou 'pokemon_api_name'
+        # Se houver duplicatas (2 Pikachu), ele pegará o primeiro.
+        # O ideal é forçar o usuário a usar o 'nickname'
+        query = self.supabase.table("player_pokemon").select("*").eq("player_id", ctx.author.id)
+        query = query.or_(f"nickname.ilike.{pokemon_identifier},pokemon_api_name.ilike.{pokemon_identifier}")
+        
+        response = query.execute()
+        
+        if not response.data:
+            await ctx.send(f"Não foi possível encontrar um Pokémon chamado '{pokemon_identifier}' no seu time.")
+            return
+        if len(response.data) > 1:
+            await ctx.send(f"Você tem mais de um Pokémon que bate com '{pokemon_identifier}'. Por favor, use o apelido (nickname) único dele.")
+            return
+            
+        pkmn = response.data[0]
+        pokemon_db_id = pkmn['id'] # <<< Este é o ID ÚNICO (uuid)
+        current_level = pkmn['current_level']
+
+        # 3. Montar o contexto para o 'evolution_utils'
+        # Normaliza o nome do item para o padrão da API (ex: "Fire Stone" -> "fire-stone")
+        item_api_name = item_name.lower().replace(" ", "-")
+        context = {"item_name": item_api_name}
+        
+        # 4. Chamar o utilitário
+        try:
+            evo_result = await evolution_utils.check_evolution(
+                self.supabase,
+                pokemon_db_id=pokemon_db_id,
+                trigger_event="item_use",
+                context=context
+            )
+            
+            if evo_result:
+                # 5. (LÓGICA DE INVENTÁRIO - PENDENTE)
+                # (Aqui você deve REMOVER o 'item_name' do inventário do jogador)
+                # ...
+                
+                # 6. Processar a evolução
+                await self.process_evolution(ctx, pokemon_db_id, current_level, evo_result)
+            else:
+                await ctx.send("Não teve efeito.")
+                
+        except Exception as e:
+            await ctx.send(f"Ocorreu um erro ao tentar usar o item: {e}")
+            print(f"Erro em !use: {e}")
+
+    # --- Comandos de Admin ---
+
+    @commands.command(name='addpokemon')
+    @commands.is_owner()
+    async def add_pokemon(self, ctx: commands.Context, pokemon_name: str, level: int = 5):
+        if not await self.player_exists(ctx.author.id):
+            await ctx.send(f"Você precisa iniciar sua jornada primeiro! Use `!start`.")
+            return
+        
+        # Chama a nova função 'add_pokemon_to_player'
+        result = await add_pokemon_to_player(
+            player_id=ctx.author.id, 
+            pokemon_api_name=pokemon_name, 
+            level=level, 
+            captured_at="Comando de Admin"
+        )
+        
+        if result['success']:
+            await ctx.send(f"✅ {pokemon_name.capitalize()} foi adicionado ao seu time! {result['message']}")
+        else:
+            await ctx.send(f"❌ Erro: {result['error']}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(PlayerCog(bot))
