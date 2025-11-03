@@ -61,14 +61,14 @@ class TeamNavigationView(ui.View):
             
             focused_db_data = self.full_team_data_db[self.current_slot - 1]
             
-            # ✅ ATUALIZAÇÃO: Esta função agora também busca os dados de XP
+            # ✅ ATUALIZAÇÃO: Esta função agora também busca os dados de XP e Shiny
             focused_pokemon = await self.cog._get_focused_pokemon_details(focused_db_data)
             
             if not focused_pokemon:
                 await interaction.followup.send("Erro ao buscar dados do Pokémon principal da PokeAPI.", ephemeral=True)
                 return
             
-            # ✅ ATUALIZAÇÃO: O embed usará os novos dados de XP
+            # ✅ ATUALIZAÇÃO: O embed usará os novos dados de XP e Shiny
             embed = await self.cog._build_team_embed(focused_pokemon, self.full_team_data_db, self.current_slot)
             
             self._update_buttons()
@@ -125,7 +125,7 @@ class TeamCog(commands.Cog):
     async def _get_focused_pokemon_details(self, p_mon_db: dict) -> dict:
         """
         Função ATUALIZADA:
-        Agora busca dados da API, dados da espécie (para tradução) e os limites de XP.
+        Agora busca dados da API, tradução, limites de XP e sprite SHINY.
         """
         api_data = await pokeapi.get_pokemon_data(p_mon_db['pokemon_api_name'])
         if not api_data:
@@ -134,25 +134,33 @@ class TeamCog(commands.Cog):
         # 1. Busca dados da espécie (para tradução e XP)
         species_data = await pokeapi.get_pokemon_species_data(p_mon_db['pokemon_api_name'])
         
-        # 2. Pega o texto em PT-BR (Problema do texto em inglês resolvido)
+        # 2. Pega o texto em PT-BR
         flavor_text = pokeapi.get_portuguese_flavor_text(species_data) if species_data else "Descrição não encontrada."
 
-        sprite_url = api_data.get('sprites', {}).get('other', {}).get('official-artwork', {}).get('front_default')
-        if not sprite_url:
-            sprite_url = api_data.get('sprites', {}).get('front_default', '')
+        # --- ✅ NOVA LÓGICA DE SHINY (Ponto 3) ---
+        is_shiny = p_mon_db.get('is_shiny', False)
+        artwork_sprites = api_data.get('sprites', {}).get('other', {}).get('official-artwork', {})
+        
+        if is_shiny and artwork_sprites.get('front_shiny'):
+            sprite_url = artwork_sprites['front_shiny']
+        else:
+            sprite_url = artwork_sprites.get('front_default')
 
-        # --- ✅ NOVA LÓGICA DE XP ---
-        xp_for_next_level = float('inf') # Padrão para Nível Máx
-        xp_for_current_level = 0       # Padrão para Nível 1
+        # Fallback se o 'official-artwork' falhar
+        if not sprite_url:
+            sprite_url = api_data.get('sprites', {}).get('front_shiny') if is_shiny else api_data.get('sprites', {}).get('front_default', '')
+        # --- Fim da Lógica de Shiny ---
+
+        # --- Lógica de XP (Existente) ---
+        xp_for_next_level = float('inf') 
+        xp_for_current_level = 0       
         
         if species_data and 'growth_rate' in species_data:
             growth_rate_url = species_data['growth_rate']['url']
             current_level = p_mon_db['current_level']
             
-            # Busca o XP total necessário para o próximo nível
             xp_for_next_level = await pokeapi.get_total_xp_for_level(growth_rate_url, current_level + 1)
             
-            # Busca o XP total necessário para o nível atual (se não for Lvl 1)
             if current_level > 1:
                 xp_for_current_level = await pokeapi.get_total_xp_for_level(growth_rate_url, current_level)
         # --- Fim da Lógica de XP ---
@@ -162,9 +170,9 @@ class TeamCog(commands.Cog):
             "api_data": api_data,
             "flavor_text": flavor_text,
             "sprite_url": sprite_url,
-            # Passa os novos dados de XP para a função de criar o embed
             "xp_for_next_level": xp_for_next_level,
-            "xp_for_current_level": xp_for_current_level
+            "xp_for_current_level": xp_for_current_level,
+            "is_shiny": is_shiny # Passa o status de shiny para o embed
         }
         
     async def _build_team_embed(self, focused_pokemon_details: dict, full_team_db: list, focused_slot: int) -> discord.Embed:
@@ -175,10 +183,14 @@ class TeamCog(commands.Cog):
         nickname = db_data['nickname'].capitalize()
         level = db_data['current_level']
         
+        # --- ✅ MUDANÇA: Adiciona emoji shiny e cor (Ponto 3) ---
+        is_shiny = focused_pokemon_details.get('is_shiny', False)
+        shiny_indicator = " ✨" if is_shiny else ""
+        
         embed = discord.Embed(
-            title=f"{nickname} - LV{level}",
-            description=f"_{focused_pokemon_details['flavor_text']}_", # (Agora em PT-BR)
-            color=discord.Color.blue()
+            title=f"{nickname} - LV{level}{shiny_indicator}",
+            description=f"_{focused_pokemon_details['flavor_text']}_", 
+            color=discord.Color.yellow() if is_shiny else discord.Color.blue()
         )
         
         if focused_pokemon_details['sprite_url']:
@@ -192,20 +204,17 @@ class TeamCog(commands.Cog):
             emojis=hp_emojis
         )
         
-        # --- ✅ LÓGICA DE XP ATUALIZADA ---
+        # --- LÓGICA DE XP ATUALIZADA (Inalterada) ---
         xp_emojis = ('🟦', '⬛')
         
         current_total_xp = db_data['current_xp']
         xp_base_level = focused_pokemon_details['xp_for_current_level']
         xp_prox_level = focused_pokemon_details['xp_for_next_level']
 
-        # Se for nível máximo (infinito)
         if xp_prox_level == float('inf'):
-            xp_bar = f"[{xp_emojis[0] * 8}]\nNível Máximo" # <-- 2ª MUDANÇA: Alterado de 10 para 8
+            xp_bar = f"[{xp_emojis[0] * 8}]\nNível Máximo" 
         else:
-            # Total de XP necessário para *passar* deste nível
             total_xp_for_this_level = xp_prox_level - xp_base_level
-            # XP que o Pokémon já ganhou *neste* nível
             current_xp_in_this_level = current_total_xp - xp_base_level
             
             xp_bar = _create_progress_bar(
@@ -216,7 +225,7 @@ class TeamCog(commands.Cog):
         # --- Fim da Melhoria de XP ---
         
         embed.add_field(name="HP", value=hp_bar, inline=False)
-        embed.add_field(name="XP", value=xp_bar, inline=False) # (Agora exibe o XP relativo)
+        embed.add_field(name="XP", value=xp_bar, inline=False) 
 
         moves_list = []
         if db_data.get('moves'):
@@ -257,7 +266,7 @@ class TeamCog(commands.Cog):
             
             await msg.edit(content=f"Buscando dados de **{focused_db_data['nickname'].capitalize()}**...")
             
-            # (Agora busca dados de XP e tradução)
+            # (Agora busca dados de XP, tradução e SHINY)
             focused_pokemon = await self._get_focused_pokemon_details(focused_db_data)
             
             if not focused_pokemon:
@@ -265,7 +274,7 @@ class TeamCog(commands.Cog):
                 return
             
             # (Agora usa os novos dados para o embed)
-            embed = await self._build_team_embed(focused_pokemon, full_team_data_db, focused_slot)
+            embed = await self.cog._build_team_embed(focused_pokemon, full_team_data_db, focused_slot)
             view = TeamNavigationView(self, player_id, focused_slot, max_slot, full_team_data_db)
             
             await msg.edit(content=None, embed=embed, view=view)

@@ -34,44 +34,73 @@ def _get_species_id_from_url(url: str) -> int | None:
         return int(match.group(1))
     return None
 
+# =================================================================
+# <<< FUNÇÃO ATUALIZADA (Ponto 5) >>>
+# =================================================================
 def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) -> bool:
     """Verifica condições para evoluções do tipo 'level-up'."""
-    # ... (esta função permanece exatamente a mesma, já estava completa) ...
+    
+    current_happiness = pkmn_data.get("happiness", 70)
     
     # Condição 1: Nível Mínimo
     min_level = details.get("min_level")
     if min_level and pkmn_data["current_level"] < min_level:
         return False 
+        
     # Condição 2: Felicidade Mínima
     min_happiness = details.get("min_happiness")
-    if min_happiness:
-        if pkmn_data.get("happiness", 70) < min_happiness:
+    if min_happiness and current_happiness < min_happiness:
             return False
+            
+    # --- ✅ NOVO (Ponto 5): Afeição (Sylveon) ---
+    # Mapeando "affection" para "happiness"
+    min_affection = details.get("min_affection")
+    if min_affection and current_happiness < min_affection:
+        return False
+        
+    # --- ✅ NOVO (Ponto 5): Beauty (Feebas) ---
+    # Mapeando "beauty" para "happiness" como um proxy. 
+    # (Ex: min_beauty=170, checa se happiness > 170)
+    min_beauty = details.get("min_beauty")
+    if min_beauty and current_happiness < min_beauty:
+        return False
+
     # Condição 3: Item Segurado
     held_item = details.get("held_item", {}).get("name")
     if held_item:
         if pkmn_data.get("held_item") != held_item:
             return False 
+            
     # Condição 4: Hora do Dia
     time_of_day = details.get("time_of_day")
     if time_of_day and time_of_day != context.get("time_of_day"):
         return False 
+        
     # Condição 5: Conhecer um Ataque
     known_move = details.get("known_move", {}).get("name")
     if known_move:
         if known_move not in pkmn_data.get("moves", []):
             return False
+            
     # Condição 6: Tipo na Equipe
     party_type = details.get("party_type", {}).get("name")
     if party_type:
         if party_type not in context.get("party_types", []):
             return False
+            
+    # --- ✅ NOVO (Ponto 5): Espécie na Equipe (Mantyke) ---
+    party_species = details.get("party_species", {}).get("name")
+    if party_species:
+        if party_species not in context.get("party_species", []):
+            return False
+            
     # Condição 7: Gênero
     gender_id = details.get("gender")
     if gender_id:
         required_gender = API_GENDER_MAP.get(gender_id)
         if pkmn_data.get("gender") != required_gender:
             return False
+            
     # Condição 8: Stats Relativos
     stat_comparison = details.get("relative_physical_stats")
     if stat_comparison is not None:
@@ -80,19 +109,21 @@ def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) ->
         if stat_comparison == 1 and not (atk > defense): return False
         if stat_comparison == -1 and not (atk < defense): return False
         if stat_comparison == 0 and not (atk == defense): return False
+        
     # Condição 9: Localização
     location = details.get("location", {}).get("name")
     if location:
         if context.get("current_location_name") != location:
             return False
+            
     # Condição 10: Inkay
     if details.get("turn_upside_down", False):
-        return False
+        return False # Isso só deve ser acionado por "item_use" (Topsy-Turvy Scroll)
         
     return True 
 
 # =================================================================
-# <<< FUNÇÃO ATUALIZADA >>>
+# <<< FUNÇÃO _check_item_use_conditions (Sem alterações) >>>
 # =================================================================
 def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict) -> bool:
     """

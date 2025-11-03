@@ -6,7 +6,7 @@ from discord import ui
 import random
 from supabase import create_client, Client
 import os
-import asyncio # NOVO: Para o on_ready
+import asyncio 
 
 # Imports centralizados
 import utils.pokeapi_service as pokeapi
@@ -20,34 +20,40 @@ def get_supabase_client():
     key: str = os.environ.get("SUPABASE_KEY")
     return create_client(url, key)
 
+# (Função add_pokemon_to_player atualizada para o sistema de 'Box')
 async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: int = 5, captured_at: str = "Início da Jornada") -> dict:
     """
     Função centralizada que adiciona um Pokémon com stats e ataques iniciais.
-    (Esta função já estava refatorada no seu arquivo e permanece igual,
-    mas é importante que ela salve 'pokemon_pokedex_id')
+    AGORA SUPORTA "BOX" (party_position = null)
     """
     supabase = get_supabase_client()
     
     try:
+        # Conta quantos Pokémon estão ATIVAMENTE NA PARTY (posição 1-6)
         count_response = supabase.table("player_pokemon").select("id", count='exact').eq("player_id", player_id).filter("party_position", "not.is", "null").execute()
-        pokemon_count = count_response.count
+        pokemon_count_in_party = count_response.count
     except Exception as e:
         return {'success': False, 'error': f"Erro ao contar Pokémon: {e}"}
 
-    if pokemon_count >= 6:
-        return {'success': False, 'error': "Seu time já está cheio! Você não pode carregar mais de 6 Pokémon."}
+    # --- LÓGICA DA BOX ---
+    party_position = None # Padrão: vai para a Box (NULL)
+    is_going_to_box = True
+    
+    if pokemon_count_in_party < 6:
+        party_position = pokemon_count_in_party + 1
+        is_going_to_box = False
+    # --- Fim da Lógica da Box ---
         
     poke_data = await pokeapi.get_pokemon_data(pokemon_api_name)
     if not poke_data:
         return {'success': False, 'error': f"Pokémon '{pokemon_api_name}' não encontrado na API."}
     
     is_shiny = random.randint(1, 4096) == 1
-    party_position = pokemon_count + 1
     
     calculated_stats = pokeapi.calculate_stats_for_level(poke_data['stats'], level)
     initial_moves = pokeapi.get_initial_moves(poke_data, level)
 
-    # Pega o gênero (ex: 12.5% fêmea para starters)
+    # Pega o gênero (lógica existente)
     gender_ratio = -1
     species_data = await pokeapi.get_pokemon_species_data(pokemon_api_name)
     if species_data:
@@ -60,32 +66,40 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
     new_pokemon_data = { 
         "player_id": player_id, 
         "pokemon_api_name": pokemon_api_name, 
-        "pokemon_pokedex_id": poke_data['id'], # Salva o ID da Pokédex
+        "pokemon_pokedex_id": poke_data['id'], 
         "nickname": pokemon_api_name.capitalize(),
         "captured_at_location": captured_at, 
         "is_shiny": is_shiny, 
-        "party_position": party_position, 
+        "party_position": party_position, # Usa a nova variável
         "current_level": level, 
         "current_hp": calculated_stats['max_hp'],
         "current_xp": 0,
         "moves": initial_moves,
-        "gender": gender, # Salva o gênero
-        "happiness": 70, # Felicidade base
-        # "held_item": None, # (O padrão do DB já deve ser null)
+        "gender": gender, 
+        "happiness": 70, 
         **calculated_stats 
     }
     
     try:
         insert_response = supabase.table("player_pokemon").insert(new_pokemon_data).execute()
         if len(insert_response.data) > 0:
-            return {'success': True, 'message': f"Pokémon adicionado com sucesso na posição {party_position}!", 'data': insert_response.data[0]}
+            
+            if is_going_to_box:
+                success_message = f"Pokémon adicionado com sucesso e enviado para a Box (seu time está cheio)!"
+            else:
+                success_message = f"Pokémon adicionado com sucesso na posição {party_position}!"
+
+            return {'success': True, 'message': success_message, 'data': insert_response.data[0]}
         else:
             return {'success': False, 'error': "Falha ao inserir o Pokémon no banco de dados."}
     except Exception as e:
         return {'success': False, 'error': f"Erro no banco de dados: {e}"}
 
+
 # --- Classes de UI (StartJourneyView, TrainerNameModal, etc.) ---
-# ... (Todas as suas classes de UI permanecem aqui, sem alterações) ...
+# ... (Todas as suas classes de UI (StartJourneyView, TrainerNameModal, 
+# StarterSelectView, RegionSelectView, ConfirmDeleteView)
+# permanecem aqui, sem alterações) ...
 class StartJourneyView(ui.View):
     def __init__(self, supabase_client: Client):
         super().__init__(timeout=None)
@@ -113,7 +127,7 @@ class StarterSelectView(ui.View):
             "Alola": ["rowlet", "litten", "popplio"], "Galar": ["grookey", "scorbunny", "sobble"],
             "Paldea": ["sprigatito", "fuecoco", "quaxly"]
         }
-        for starter in starters.get(region, []):
+        for starter in starters.get(self.region, []):
             button = ui.Button(label=starter.capitalize(), style=discord.ButtonStyle.primary, custom_id=starter)
             button.callback = self.select_starter
             self.add_item(button)
@@ -207,16 +221,14 @@ class ConfirmDeleteView(ui.View):
         await interaction.response.edit_message(view=self)
         await interaction.followup.send("Ação cancelada. Sua jornada continua!", ephemeral=True)
         self.stop()
-
 # --- Cog Class ---
 
 class PlayerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.supabase: Client = get_supabase_client()
-        self.evolve_pokemon_func = None # NOVO: Para armazenar a função de evolução
+        self.evolve_pokemon_func = None 
 
-    # NOVO: Listener para se conectar ao EvolutionCog
     @commands.Cog.listener()
     async def on_ready(self):
         """Espera o bot estar pronto e busca o cog de evolução."""
@@ -234,10 +246,89 @@ class PlayerCog(commands.Cog):
         return bool(response.data)
 
     # =================================================================
-    # <<< FUNÇÃO 'process_evolution' REMOVIDA DESTE ARQUIVO >>>
-    # Ela foi centralizada no 'evolution_cog.py'
+    # <<< NOVAS FUNÇÕES AUXILIARES DE INVENTÁRIO (Para !equip) >>>
     # =================================================================
+    
+    async def _find_item_in_db(self, item_name: str) -> dict | None:
+        """Helper para buscar o ID e nome exato de um item pelo nome (case-insensitive)"""
+        try:
+            # Busca o item na tabela 'items'
+            res = self.supabase.table('items').select('id, name').ilike('name', item_name).single().execute()
+            return res.data if res.data else None
+        except Exception as e:
+            print(f"Erro ao buscar item_id por nome: {e}")
+            return None
+
+    async def _add_item_to_inventory_by_id(self, player_id: int, item_id: int, quantity: int = 1):
+        """
+        Adiciona um item ao inventário do jogador (upsert).
+        Lógica copiada do ShopCog para uso interno do PlayerCog.
+        """
+        try:
+            current_response = self.supabase.table('player_inventory') \
+                .select('quantity') \
+                .eq('player_id', player_id) \
+                .eq('item_id', item_id) \
+                .single().execute() # Usar single() é mais seguro aqui
             
+            if current_response.data:
+                current_quantity = current_response.data['quantity']
+                new_quantity = current_quantity + quantity
+                self.supabase.table('player_inventory') \
+                    .update({'quantity': new_quantity}) \
+                    .eq('player_id', player_id) \
+                    .eq('item_id', item_id) \
+                    .execute()
+            else:
+                self.supabase.table('player_inventory') \
+                    .insert({'player_id': player_id, 'item_id': item_id, 'quantity': quantity}) \
+                    .execute()
+            return True
+        except Exception as e:
+            print(f"Erro ao adicionar item ao inventário (PlayerCog): {e}")
+            return False
+
+    async def _remove_item_from_inventory_by_id(self, player_id: int, item_id: int, quantity_to_remove: int = 1) -> bool:
+        """
+        Remove uma quantidade de um item do inventário.
+        Retorna True se foi bem sucedido, False se o item não existia ou não tinha quantidade.
+        """
+        try:
+            current_response = self.supabase.table('player_inventory') \
+                .select('quantity') \
+                .eq('player_id', player_id) \
+                .eq('item_id', item_id) \
+                .single().execute()
+            
+            # Falha se o item não existe na bolsa ou se a quantidade é insuficiente
+            if not current_response.data or current_response.data['quantity'] < quantity_to_remove:
+                return False 
+
+            new_quantity = current_response.data['quantity'] - quantity_to_remove
+            
+            if new_quantity <= 0:
+                # Remove a linha do inventário se a quantidade for 0 ou menos
+                self.supabase.table('player_inventory') \
+                    .delete() \
+                    .eq('player_id', player_id) \
+                    .eq('item_id', item_id) \
+                    .execute()
+            else:
+                # Apenas atualiza a quantidade
+                self.supabase.table('player_inventory') \
+                    .update({'quantity': new_quantity}) \
+                    .eq('player_id', player_id) \
+                    .eq('item_id', item_id) \
+                    .execute()
+            return True
+        except Exception as e:
+            print(f"Erro ao remover item do inventário (PlayerCog): {e}")
+            return False
+            
+    # =================================================================
+    # <<< FIM DAS NOVAS FUNÇÕES AUXILIARES >>>
+    # =================================================================
+
     # --- Comandos do Jogador ---
 
     @commands.command(name='start')
@@ -277,7 +368,7 @@ class PlayerCog(commands.Cog):
 
     @commands.command(name='help')
     async def custom_help(self, ctx: commands.Context):
-        # ... (código do !help sem alterações) ...
+        # (código do !help, ATUALIZADO com !equip)
         embed = discord.Embed(title="Ajuda do PokeAdventure", description="Comandos para sua jornada.", color=discord.Color.orange())
         embed.add_field(name="`!start`", value="Inicia sua aventura e cria seu personagem.", inline=False)
         embed.add_field(name="`!profile`", value="Exibe seu perfil de treinador.", inline=False)
@@ -285,13 +376,14 @@ class PlayerCog(commands.Cog):
         embed.add_field(name="`!shop`", value="Mostra a loja de itens.", inline=False)
         embed.add_field(name="`!buy \"<item>\" [pokemon]`", value="Compra um item. (Ex: !buy \"Fire Stone\" Eevee)", inline=False)
         embed.add_field(name="`!bag`", value="Mostra os itens na sua mochila.", inline=False)
-        embed.add_field(name="`!use <item> on <pokemon>`", value="Usa um item em um Pokémon (Ex: !use \"Link Cable\" on Kadabra).", inline=False)
+        embed.add_field(name="`!use <item> on <pokemon>`", value="Usa um item consumível em um Pokémon (Ex: !use \"Link Cable\" on Kadabra).", inline=False)
+        embed.add_field(name="`!equip <item> on <pokemon>`", value="Equipa um item segurável em um Pokémon (Ex: !equip \"Metal Coat\" on Scyther).", inline=False)
         embed.add_field(name="`!delete`", value="Apaga seu progresso para começar de novo.", inline=False)
         if await self.bot.is_owner(ctx.author):
-            embed.add_field(name="--- Comandos de Administrador ---", value="`!addpokemon <nome> [level]`\n`!givexp <qtd> <nickname>`\n`!givemoney <qtd>`", inline=False)
+            embed.add_field(name="--- Comandos de Administrador ---", value="`!addpokemon <nome> [level]`\n`!givexp <qtd> <nickname>`\n`!givehappiness <qtd> <nickname>`\n`!givemoney <qtd>`", inline=False)
         await ctx.send(embed=embed)
         
-    @commands.command(name="use", help="Usa um item em um Pokémon.")
+    @commands.command(name="use", help="Usa um item consumível em um Pokémon.")
     async def use_item(self, ctx: commands.Context, *, args: str):
         """Usa um item. Formato: !use <item_name> on <pokemon_identifier>"""
         try:
@@ -302,32 +394,50 @@ class PlayerCog(commands.Cog):
             await ctx.send("Formato incorreto. Use: `!use \"<nome do item>\" on <nome ou apelido do pokémon>`")
             return
 
-        # 1. (LÓGICA DE INVENTÁRIO - PENDENTE)
-        # TODO: Verificar se o jogador tem o 'item_name' no inventário
-        # TODO: Remover o 'item_name' do inventário se a evolução for bem-sucedida
-        
-        # 2. Encontrar o Pokémon
-        query = self.supabase.table("player_pokemon").select("*").eq("player_id", ctx.author.id)
-        query = query.or_(f"nickname.ilike.{pokemon_identifier},pokemon_api_name.ilike.{pokemon_identifier}")
-        
-        response = query.execute()
-        
-        if not response.data:
-            await ctx.send(f"Não foi possível encontrar um Pokémon chamado '{pokemon_identifier}' no seu time.")
-            return
-        if len(response.data) > 1:
-            await ctx.send(f"Você tem mais de um Pokémon que bate com '{pokemon_identifier}'. Por favor, use o apelido (nickname) único dele.")
-            return
-            
-        pkmn = response.data[0]
-        pokemon_db_id = pkmn['id']
-        current_level = pkmn['current_level'] # Necessário para a função de evoluir
+        player_id = ctx.author.id
 
-        # 3. Montar o contexto para o 'evolution_utils'
-        item_api_name = item_name.lower().replace(" ", "-")
+        # 1. Encontrar o item NO BANCO DE DADOS (para pegar ID e nome real)
+        item_db_data = await self._find_item_in_db(item_name)
+        if not item_db_data:
+            await ctx.send(f"O item `{item_name}` não parece existir.")
+            return
+        
+        item_db_id = item_db_data['id']
+        item_db_name = item_db_data['name']
+
+        # 2. Tentar remover o item do inventário
+        removed_from_bag = await self._remove_item_from_inventory_by_id(player_id, item_db_id, 1)
+        if not removed_from_bag:
+            await ctx.send(f"Você não tem o item `{item_db_name}` na sua bolsa para usar.")
+            return
+
+        # 3. Encontrar o Pokémon
+        try:
+            query = self.supabase.table("player_pokemon").select("*").eq("player_id", player_id)
+            query = query.or_(f"nickname.ilike.{pokemon_identifier},pokemon_api_name.ilike.{pokemon_identifier}")
+            response = query.execute()
+        
+            if not response.data:
+                await ctx.send(f"Não foi possível encontrar '{pokemon_identifier}'.")
+                await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
+                return
+            if len(response.data) > 1:
+                await ctx.send(f"Encontrei mais de um '{pokemon_identifier}'. Use o apelido único.")
+                await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
+                return
+                
+            pkmn = response.data[0]
+            pokemon_db_id = pkmn['id']
+        except Exception as e:
+            await ctx.send(f"Erro ao buscar seu Pokémon: {e}")
+            await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
+            return
+
+        # 4. Montar o contexto para o 'evolution_utils'
+        item_api_name = item_db_name.lower().replace(" ", "-")
         context = {"item_name": item_api_name}
         
-        # 4. Chamar o utilitário
+        # 5. Chamar o utilitário
         try:
             evo_result = await evolution_utils.check_evolution(
                 self.supabase,
@@ -337,23 +447,101 @@ class PlayerCog(commands.Cog):
             )
             
             if evo_result:
-                # 5. (LÓGICA DE INVENTÁRIO - PENDENTE)
-                # (Aqui você deve REMOVER o 'item_name' do inventário do jogador)
-                # ...
-                
-                # 6. Processar a evolução usando a FUNÇÃO CENTRALIZADA
+                # O item foi consumido com sucesso (removido no passo 2)
                 if not self.evolve_pokemon_func:
                     await ctx.send("Erro: O sistema de evolução não está online. Tente novamente mais tarde.")
+                    # (Devolve o item, pois a evolução falhou)
+                    await self._add_item_to_inventory_by_id(player_id, item_db_id, 1)
                     return
                 
-                # Chama a função do EvolutionCog
-                await self.evolve_pokemon_func(ctx.author.id, pokemon_db_id, evo_result['new_name'], ctx.channel)
+                await self.evolve_pokemon_func(player_id, pokemon_db_id, evo_result['new_name'], ctx.channel)
             else:
                 await ctx.send("Não teve efeito.")
+                # Devolve o item, pois não foi usado
+                await self._add_item_to_inventory_by_id(player_id, item_db_id, 1)
                 
         except Exception as e:
             await ctx.send(f"Ocorreu um erro ao tentar usar o item: {e}")
+            await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
             print(f"Erro em !use: {e}")
+
+    # =================================================================
+    # <<< NOVO COMANDO !equip >>>
+    # =================================================================
+    @commands.command(name="equip", help="Equipa um item segurável em um Pokémon.")
+    async def equip_item(self, ctx: commands.Context, *, args: str):
+        """Equipa um item. Formato: !equip "<item_name>" on <pokemon_identifier>"""
+        try:
+            item_name, pokemon_identifier = args.split(" on ", 1)
+            item_name = item_name.strip().strip('"')
+            pokemon_identifier = pokemon_identifier.strip()
+        except ValueError:
+            await ctx.send("Formato incorreto. Use: `!equip \"<nome do item>\" on <nome do pokémon>`")
+            return
+        
+        player_id = ctx.author.id
+
+        # 1. Encontrar o item NO BANCO DE DADOS (para pegar ID e nome real)
+        item_db_data = await self._find_item_in_db(item_name)
+        if not item_db_data:
+            await ctx.send(f"O item `{item_name}` não parece existir.")
+            return
+        
+        item_db_id = item_db_data['id']
+        item_db_name = item_db_data['name'] # Nome real (ex: "Metal Coat")
+
+        # 2. Tentar remover o item do inventário
+        removed_from_bag = await self._remove_item_from_inventory_by_id(player_id, item_db_id, 1)
+        if not removed_from_bag:
+            await ctx.send(f"Você não tem o item `{item_db_name}` na sua bolsa para equipar.")
+            return
+
+        # 3. Encontrar o Pokémon
+        try:
+            query = self.supabase.table("player_pokemon").select("id, nickname, held_item").eq("player_id", player_id)
+            query = query.or_(f"nickname.ilike.{pokemon_identifier},pokemon_api_name.ilike.{pokemon_identifier}")
+            pkmn_res = query.execute()
+            
+            if not pkmn_res.data:
+                await ctx.send(f"Não foi possível encontrar '{pokemon_identifier}'.")
+                await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
+                return
+            if len(pkmn_res.data) > 1:
+                await ctx.send(f"Encontrei mais de um '{pokemon_identifier}'. Use o apelido único.")
+                await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
+                return
+                
+            pkmn = pkmn_res.data[0]
+            pokemon_db_id = pkmn['id']
+            pokemon_nickname = pkmn['nickname']
+            old_held_item_name = pkmn.get('held_item')
+        
+        except Exception as e:
+            await ctx.send(f"Erro ao buscar seu Pokémon: {e}")
+            await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
+            return
+
+        # 4. Equipar o novo item (Atualiza o campo de texto 'held_item')
+        try:
+            self.supabase.table('player_pokemon').update({'held_item': item_db_name}).eq('id', pokemon_db_id).execute()
+        except Exception as e:
+            await ctx.send(f"Erro ao equipar o item: {e}")
+            await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
+            return
+
+        # 5. Devolver o item antigo (se houver)
+        if old_held_item_name:
+            # Encontra o ID do item antigo para poder adicioná-lo de volta
+            old_item_db_data = await self._find_item_in_db(old_held_item_name)
+            if old_item_db_data:
+                await self._add_item_to_inventory_by_id(player_id, old_item_db_data['id'], 1)
+            
+            await ctx.send(f"✅ Você equipou **{item_db_name}** em **{pokemon_nickname}**! O item **{old_held_item_name}** foi devolvido para sua bolsa.")
+        else:
+            await ctx.send(f"✅ Você equipou **{item_db_name}** em **{pokemon_nickname}**!")
+    # =================================================================
+    # <<< FIM DO NOVO COMANDO >>>
+    # =================================================================
 
     # --- Comandos de Admin ---
 

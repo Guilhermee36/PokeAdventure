@@ -9,13 +9,10 @@ import asyncio # Importado para o helper de contexto
 
 # Importa os utilitários corretos
 import utils.pokeapi_service as pokeapi
-import utils.evolution_utils as evolution_utils # NOVO
+import utils.evolution_utils as evolution_utils
 
 # --- CLASSES DE UI (MoveReplaceView) ---
-# (A View EvolutionChoiceView foi removida daqui, pois a lógica de level-up
-# agora é tratada inteiramente pelo evolution_utils, que retorna apenas UMA
-# evolução válida por vez, se houver).
-
+# (O código MoveReplaceView permanece o mesmo...)
 class MoveReplaceView(ui.View):
     """View para o jogador substituir um ataque quando a lista de 4 ataques está cheia."""
     def __init__(self, pokemon_id: str, new_move: str, current_moves: list, cog):
@@ -62,6 +59,8 @@ class EvolutionCog(commands.Cog):
         print("EvolutionCog carregado e conectado ao Supabase.")
 
     # --- FUNÇÕES DE LÓGICA INTERNA ---
+    # (..._update_pokemon_moves, check_for_new_moves, _get_game_context, check_for_level_up, evolve_pokemon... 
+    # todas essas funções permanecem exatamente iguais ao seu arquivo original)
 
     async def _update_pokemon_moves(self, pokemon_id: str, new_move: str, slot: int):
         """Função auxiliar para atualizar a lista de ataques de um Pokémon no DB."""
@@ -78,7 +77,6 @@ class EvolutionCog(commands.Cog):
 
     async def check_for_new_moves(self, pokemon: dict, new_level: int, channel):
         """Verifica e processa TODOS os novos ataques que um Pokémon aprende em um nível."""
-        # (Esta função contém as correções da sua versão original e está mantida)
         pokemon_api_data = await pokeapi.get_pokemon_data(pokemon['pokemon_api_name'])
         if not pokemon_api_data: return
 
@@ -124,7 +122,7 @@ class EvolutionCog(commands.Cog):
                 try:
                     await msg.edit(view=None) # Limpa os botões após a interação
                 except discord.NotFound:
-                    pass # Mensagem pode ter sido deletada
+                    pass 
 
     async def _get_game_context(self, player_id: int, pokemon_to_exclude_id: str) -> dict:
         """
@@ -148,7 +146,7 @@ class EvolutionCog(commands.Cog):
                 .neq('id', pokemon_to_exclude_id) \
                 .execute()
 
-            # 3. Coleta os tipos (isso pode ser lento, mas o cache do pokeapi ajuda)
+            # 3. Coleta os tipos
             if party_res.data:
                 api_tasks = []
                 for pkmn in party_res.data:
@@ -179,7 +177,7 @@ class EvolutionCog(commands.Cog):
         growth_rate_url = species_data['growth_rate']['url']
         next_level = pokemon['current_level'] + 1
         xp_needed = await pokeapi.get_total_xp_for_level(growth_rate_url, next_level)
-        if xp_needed == float('inf'): # Já está no nível máximo
+        if xp_needed == float('inf'):
              return 
 
         while pokemon['current_xp'] >= xp_needed:
@@ -200,7 +198,7 @@ class EvolutionCog(commands.Cog):
                 # Atualiza o DB ANTES de enviar a mensagem
                 response = self.supabase.table('player_pokemon').update(update_payload).eq('id', pokemon['id']).execute()
                 if not response.data:
-                    break # Falha ao atualizar, interrompe o loop
+                    break 
                 
                 await channel.send(f"✨ **{pokemon['nickname']}** subiu para o **nível {new_level}**! Seus stats aumentaram!")
                 
@@ -210,14 +208,9 @@ class EvolutionCog(commands.Cog):
                 
                 await self.check_for_new_moves(pokemon, new_level, channel)
                 
-                # ========================================================
-                # <<< LÓGICA DE EVOLUÇÃO REFATORADA >>>
-                # ========================================================
-                
-                # 1. Monta o contexto complexo
+                # LÓGICA DE EVOLUÇÃO REFATORADA
                 game_context = await self._get_game_context(pokemon['player_id'], pokemon['id'])
                 
-                # 2. Chama o "Cérebro" Central
                 evo_result = await evolution_utils.check_evolution(
                     supabase=self.supabase,
                     pokemon_db_id=pokemon['id'],
@@ -226,29 +219,18 @@ class EvolutionCog(commands.Cog):
                 )
                 
                 if evo_result:
-                    # 3. Aplica a evolução
                     await self.evolve_pokemon(pokemon['player_id'], pokemon['id'], evo_result['new_name'], channel)
-                    
-                    # 4. Interrompe o loop de level-up
-                    # A nova forma pode ter uma taxa de crescimento de XP diferente.
-                    # O check_for_level_up será chamado novamente na próxima vez que ganhar XP.
                     break 
-                # ========================================================
-                # <<< FIM DA REFATORAÇÃO >>>
-                # ========================================================
+                # FIM DA REFATORAÇÃO
 
-                # Busca o XP para o *próximo* nível
                 xp_needed = await pokeapi.get_total_xp_for_level(growth_rate_url, new_level + 1)
                 if xp_needed == float('inf'):
-                    break # Atingiu o nível máximo
+                    break 
 
             except Exception as e:
                 print(f"Erro ao atualizar nível e stats no DB: {e}")
                 break
 
-    # =================================================================
-    # FUNÇÃO CENTRALIZADA PARA *APLICAR* A EVOLUÇÃO
-    # =================================================================
     async def evolve_pokemon(self, discord_id: int, pokemon_db_id: str, new_pokemon_api_name: str, channel):
         """
         Atualiza os dados de um Pokémon no DB após evoluir.
@@ -269,12 +251,12 @@ class EvolutionCog(commands.Cog):
             new_pokemon_api_data = await pokeapi.get_pokemon_data(new_pokemon_api_name)
             if not new_pokemon_api_data: return
             
-            new_api_id = new_pokemon_api_data['id'] # Pega o ID da Pokédex
+            new_api_id = new_pokemon_api_data['id'] 
 
             # 3. Recalcula os stats para a nova forma no mesmo nível
             recalculated_stats = pokeapi.calculate_stats_for_level(new_pokemon_api_data['stats'], level)
 
-            # 4. Monta o payload (resetando o HP e atualizando stats)
+            # 4. Monta o payload
             update_payload = {
                 'pokemon_api_name': new_pokemon_api_name,
                 'pokemon_pokedex_id': new_api_id,
@@ -295,10 +277,7 @@ class EvolutionCog(commands.Cog):
             print(f"Erro ao evoluir Pokémon: {e}")
             await channel.send(f"Ocorreu um erro crítico durante a evolução.")
     
-    # =================================================================
-    # <<< A FUNÇÃO check_evolution() FOI REMOVIDA DESTE ARQUIVO >>>
-    # =================================================================
-    
+
     # --- COMANDOS DO JOGADOR ---
 
     @commands.command(name='givexp', help='(Admin) Dá XP para um dos seus Pokémon.')
@@ -306,13 +285,22 @@ class EvolutionCog(commands.Cog):
     async def give_xp(self, ctx: commands.Context, amount: int, *, pokemon_nickname: str):
         """Dá uma quantidade de XP para um Pokémon específico do jogador."""
         try:
-            response = self.supabase.table('player_pokemon').select('*').eq('player_id', ctx.author.id).ilike('nickname', pokemon_nickname).single().execute()
+            # (Código corrigido para evitar erro de duplicata)
+            response = self.supabase.table('player_pokemon') \
+                .select('*') \
+                .eq('player_id', ctx.author.id) \
+                .ilike('nickname', pokemon_nickname.strip()) \
+                .execute()
 
             if not response.data:
                 await ctx.send(f"Não encontrei nenhum Pokémon com o nome `{pokemon_nickname}`.")
                 return
+                
+            if len(response.data) > 1:
+                await ctx.send(f"Você tem mais de um Pokémon com o nome `{pokemon_nickname}`. Use o apelido único.")
+                return
 
-            pokemon = response.data
+            pokemon = response.data[0]
             
             new_xp = pokemon['current_xp'] + amount
             self.supabase.table('player_pokemon').update({'current_xp': new_xp}).eq('id', pokemon['id']).execute()
@@ -326,6 +314,50 @@ class EvolutionCog(commands.Cog):
             await ctx.send(f"Ocorreu um erro inesperado ao dar XP.")
             print(f"Erro no comando !givexp: {e}")
 
+    # =================================================================
+    # <<< NOVO COMANDO !givehappiness >>>
+    # =================================================================
+    @commands.command(name='givehappiness', help='(Admin) Dá felicidade para um dos seus Pokémon.')
+    @commands.is_owner()
+    async def give_happiness(self, ctx: commands.Context, amount: int, *, pokemon_nickname: str):
+        """Dá (ou remove) felicidade de um Pokémon específico."""
+        try:
+            response = self.supabase.table('player_pokemon') \
+                .select('id, nickname, happiness') \
+                .eq('player_id', ctx.author.id) \
+                .ilike('nickname', pokemon_nickname.strip()) \
+                .execute()
+
+            if not response.data:
+                await ctx.send(f"Não encontrei nenhum Pokémon com o nome `{pokemon_nickname}`.")
+                return
+
+            if len(response.data) > 1:
+                await ctx.send(f"Você tem mais de um Pokémon com o nome `{pokemon_nickname}`. Use o apelido único.")
+                return
+            
+            pokemon = response.data[0]
+            
+            # O padrão do DB é 70, então podemos usar .get com segurança
+            current_happiness = pokemon.get('happiness', 70)
+            new_happiness = current_happiness + amount
+            
+            # Cap de felicidade (0 a 255 é o padrão nos jogos)
+            new_happiness = max(0, min(255, new_happiness)) 
+            
+            self.supabase.table('player_pokemon').update({'happiness': new_happiness}).eq('id', pokemon['id']).execute()
+            
+            await ctx.send(f"Você alterou a felicidade de **{pokemon['nickname']}** em {amount}. Felicidade Total agora: **{new_happiness}/255**.")
+            
+            # Nota: Dar felicidade por si só não evolui. A evolução por felicidade
+            # é checada durante o 'level_up' (que é chamado pelo !givexp).
+            
+        except Exception as e:
+            await ctx.send(f"Ocorreu um erro inesperado ao dar felicidade.")
+            print(f"Erro no comando !givehappiness: {e}")
+    # =================================================================
+    # <<< FIM DO NOVO COMANDO >>>
+    # =================================================================
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(EvolutionCog(bot))
