@@ -47,32 +47,41 @@ def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) ->
     if min_happiness:
         if pkmn_data.get("happiness", 70) < min_happiness:
             return False
+            
     # Condição 3: Item Segurado
-    held_item = details.get("held_item", {}).get("name")
+    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'held_item' for null
+    held_item = (details.get("held_item") or {}).get("name")
     if held_item:
         # 'held_item' no DB deve ser o 'api_name' (ex: "metal-coat")
         if pkmn_data.get("held_item") != held_item:
             return False 
+            
     # Condição 4: Hora do Dia
     time_of_day = details.get("time_of_day")
     if time_of_day and time_of_day != context.get("time_of_day"):
         return False 
+        
     # Condição 5: Conhecer um Ataque
-    known_move = details.get("known_move", {}).get("name")
+    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'known_move' for null
+    known_move = (details.get("known_move") or {}).get("name")
     if known_move:
         if known_move not in pkmn_data.get("moves", []):
             return False
+            
     # Condição 6: Tipo na Equipe
-    party_type = details.get("party_type", {}).get("name")
+    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'party_type' for null
+    party_type = (details.get("party_type") or {}).get("name")
     if party_type:
         if party_type not in context.get("party_types", []):
             return False
+            
     # Condição 7: Gênero
     gender_id = details.get("gender")
     if gender_id:
         required_gender = API_GENDER_MAP.get(gender_id)
         if pkmn_data.get("gender") != required_gender:
             return False
+            
     # Condição 8: Stats Relativos
     stat_comparison = details.get("relative_physical_stats")
     if stat_comparison is not None:
@@ -81,11 +90,14 @@ def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) ->
         if stat_comparison == 1 and not (atk > defense): return False
         if stat_comparison == -1 and not (atk < defense): return False
         if stat_comparison == 0 and not (atk == defense): return False
+        
     # Condição 9: Localização
-    location = details.get("location", {}).get("name")
+    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'location' for null
+    location = (details.get("location") or {}).get("name")
     if location:
         if context.get("current_location_name") != location:
             return False
+            
     # Condição 10: Inkay (ignorado no level-up, tratado com item)
     if details.get("turn_upside_down", False):
         return False
@@ -103,8 +115,11 @@ def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict, ne
         return False
 
     # --- Condição Principal: Item usado bate com o item esperado? ---
-    item_needed = details.get("item", {}).get("name") # Este é o 'api_name' da PokeAPI
-    trigger_name = details.get("trigger", {}).get("name")
+    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'item' for null
+    item_needed = (details.get("item") or {}).get("name") # Este é o 'api_name' da PokeAPI
+    
+    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'trigger' for null
+    trigger_name = (details.get("trigger") or {}).get("name")
     
     # --- Casos Especiais (Workarounds) ---
     is_link_cable_trade = (trigger_name == "trade" and item_used == "link-cable")
@@ -140,14 +155,17 @@ def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict, ne
         return False 
 
     # Condição 4: Localização (Ex: Eevee -> Leafeon/Glaceon)
-    location = details.get("location", {}).get("name")
+    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'location' for null
+    # (Embora seja raro em item_use, é uma boa prática)
+    location = (details.get("location") or {}).get("name")
     if location:
         if context.get("current_location_name") != location:
             return False
             
     # Condição 5: Item Segurado (Exclusivo do Link Cable)
     if is_link_cable_trade:
-        item_needed_to_hold = details.get("held_item", {}).get("name") # ex: "metal-coat"
+        # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'held_item' for null
+        item_needed_to_hold = (details.get("held_item") or {}).get("name") # ex: "metal-coat"
         if item_needed_to_hold:
             if pkmn_data.get("held_item") != item_needed_to_hold:
                 return False
@@ -214,7 +232,10 @@ async def check_evolution(
         for details in details_list:
             
             # --- LÓGICA DE FILTRO CORRIGIDA ---
-            trigger_type = details.get("trigger", {}).get("name") # ex: "level-up", "use-item", "trade"
+            # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'trigger' for null
+            trigger_details = details.get("trigger") or {}
+            trigger_type = trigger_details.get("name") # ex: "level-up", "use-item", "trade"
+            
             is_turn_upside_down = details.get("turn_upside_down", False)
 
             evolution_allowed = False

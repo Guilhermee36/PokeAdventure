@@ -2,28 +2,33 @@
 
 import discord
 from discord.ext import commands
+from discord import ui
 import os
+import aiohttp
 import asyncio
 from supabase import create_client, Client
+from postgrest import APIResponse
+
 import utils.evolution_utils as evolution_utils
 
 def get_supabase_client():
-    # ... (código existente, sem alterações) ...
+    """Cria e retorna um cliente Supabase."""
     url: str = os.environ.get("SUPABASE_URL")
     key: str = os.environ.get("SUPABASE_KEY")
     return create_client(url, key)
 
 class ShopCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
-        # ... (código existente, sem alterações) ...
         self.bot = bot
         self.supabase: Client = get_supabase_client()
+        # Armazena a função de evoluir (do evolution_cog) para o !buy
         self.evolve_pokemon_func = None 
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # ... (código existente, sem alterações) ...
+        """Espera o bot estar pronto e busca o cog de evolução."""
         await asyncio.sleep(1) 
+        
         evolution_cog = self.bot.get_cog("EvolutionCog")
         if evolution_cog:
             self.evolve_pokemon_func = evolution_cog.evolve_pokemon
@@ -32,7 +37,7 @@ class ShopCog(commands.Cog):
             print("ERRO: ShopCog não conseguiu encontrar EvolutionCog.")
 
     async def get_player_money(self, player_id: int) -> int:
-        # ... (código existente, sem alterações) ...
+        """Busca o dinheiro do jogador."""
         try:
             res = self.supabase.table('players').select('money').eq('discord_id', player_id).single().execute()
             return res.data.get('money', 0) if res.data else 0
@@ -40,7 +45,7 @@ class ShopCog(commands.Cog):
             return 0
 
     async def update_player_money(self, player_id: int, new_amount: int) -> bool:
-        # ... (código existente, sem alterações) ...
+        """Atualiza o dinheiro do jogador."""
         try:
             self.supabase.table('players').update({'money': new_amount}).eq('discord_id', player_id).execute()
             return True
@@ -49,7 +54,7 @@ class ShopCog(commands.Cog):
             return False
 
     async def add_item_to_inventory(self, player_id: int, item_id: int, quantity: int = 1):
-        # ... (código existente, sem alterações) ...
+        """Adiciona um item ao inventário do jogador (upsert)."""
         try:
             current_response = self.supabase.table('player_inventory') \
                 .select('quantity') \
@@ -75,14 +80,17 @@ class ShopCog(commands.Cog):
 
     @commands.command(name='shop', help='Mostra a loja de itens.')
     async def shop(self, ctx: commands.Context, *, category: str = None):
-        # ... (código existente, sem alterações) ...
+        """Mostra uma loja com itens do banco de dados, filtrada por categoria."""
+        
+        # Mapeamento expandido para 5 categorias
         shop_map = {
             '1': 'common', 'comuns': 'common',
             '2': 'special', 'especiais': 'special',
             '3': 'evo_stone', 'pedras': 'evo_stone',
-            '4.': 'evo_held', 'seguraveis': 'evo_held',
+            '4': 'evo_held', 'seguraveis': 'evo_held',
             '5': 'mechanics', 'mecanicas': 'mechanics'
         }
+        
         title_map = {
             'common': '🛒 Loja: Itens Comuns 🛒',
             'special': '🛒 Loja: Itens Especiais 🛒',
@@ -90,9 +98,12 @@ class ShopCog(commands.Cog):
             'evo_held': '🛒 Loja: Itens Evolutivos (Seguráveis) 🛒',
             'mechanics': '🛒 Loja: Mecânicas de Batalha 🛒'
         }
+        
         db_filter_type = None
         if category:
             db_filter_type = shop_map.get(category.lower())
+
+        # Se nenhuma categoria foi dada ou a categoria é inválida, mostra o menu
         if not db_filter_type:
             embed = discord.Embed(title="🛒 Loja Pokémon 🛒", color=discord.Color.blue())
             embed.description = "Bem-vindo! Use `!shop <categoria>` para ver os itens."
@@ -104,6 +115,8 @@ class ShopCog(commands.Cog):
             embed.set_footer(text="Para comprar, use !buy \"Nome do Item\"")
             await ctx.send(embed=embed)
             return
+
+        # Se a categoria é válida, busca os itens
         try:
             response = self.supabase.table('items') \
                 .select('*') \
@@ -111,20 +124,29 @@ class ShopCog(commands.Cog):
                 .lte('required_badges', 99) \
                 .order('name', desc=False) \
                 .execute()
+            
             if not response.data:
                 await ctx.send(f"A categoria '{db_filter_type}' está vazia no momento ou você ainda não tem insígnias suficientes.")
                 return
+
             embed = discord.Embed(title=title_map.get(db_filter_type, "🛒 Loja 🛒"), color=discord.Color.blue())
             embed.description = f"Itens disponíveis. Use `!buy \"Nome do Item\"`."
+            
             for item in response.data:
-                try:
-                    price = int(item['effect_tag'].split(':')[-1])
-                    price_str = f"${price:,}"
-                except (ValueError, TypeError, IndexError):
-                    price_str = "Preço Indefinido"
+                # ✅ CORREÇÃO: Adiciona uma checagem 'if' para o effect_tag
+                price_str = "Preço Indefinido"
+                if item.get('effect_tag'):
+                    try:
+                        price = int(item['effect_tag'].split(':')[-1])
+                        price_str = f"${price:,}"
+                    except (ValueError, TypeError, IndexError):
+                        price_str = "Preço Mal Formado"
+                
                 badge_req = item.get('required_badges', 0)
                 badge_str = f" (Requer {badge_req} Insígnias)" if badge_req > 0 else ""
+                
                 embed.add_field(name=f"{item['name']} - {price_str}{badge_str}", value=item['description'], inline=False)
+                
             await ctx.send(embed=embed)
         except Exception as e:
             await ctx.send(f"Ocorreu um erro ao carregar a loja: {e}")
@@ -151,6 +173,7 @@ class ShopCog(commands.Cog):
             
             for item_entry in response.data:
                 item = item_entry['items']
+                # Se o item não tiver 'items' (foi deletado da DB), pula
                 if not item: 
                     continue
                     
@@ -165,11 +188,8 @@ class ShopCog(commands.Cog):
                 embed.add_field(name="Itens Comuns", value="".join(bag_items['common']), inline=False)
             if bag_items['special']:
                 embed.add_field(name="Itens Especiais", value="".join(bag_items['special']), inline=False)
-            
-            # ✅ CORREÇÃO: 'bag_le' -> 'bag_items'
             if bag_items['evo_stone']:
                 embed.add_field(name="Pedras de Evolução", value="".join(bag_items['evo_stone']), inline=False)
-                
             if bag_items['evo_held']:
                 embed.add_field(name="Itens Seguráveis", value="".join(bag_items['evo_held']), inline=False)
             if bag_items['mechanics']:
@@ -179,15 +199,12 @@ class ShopCog(commands.Cog):
 
             await ctx.send(embed=embed)
         except Exception as e:
-            # Esta é a provável fonte do seu erro 'NoneType' se o item fosse nulo
-            print(f"Erro no comando !bag: {e}") 
             await ctx.send(f"Ocorreu um erro ao abrir sua mochila: {e}")
 
     @commands.command(name='buy', help='Compra um item da loja.')
     async def buy(self, ctx: commands.Context, item_name: str, *, pokemon_name: str = None):
-        """Compra um item da loja. (A lógica permanece a mesma)"""
+        """Compra um item da loja."""
         try:
-            # ✅ CORREÇÃO: Pega o 'api_name' também
             item_res = self.supabase.table('items').select('*, api_name').ilike('name', item_name).single().execute()
             if not item_res.data:
                 await ctx.send(f"O item `{item_name}` não existe na loja. Verifique o nome e use aspas se necessário.")
@@ -195,9 +212,30 @@ class ShopCog(commands.Cog):
             
             item = item_res.data
             item_id = item['id']
-            tag_parts = item['effect_tag'].split(':')
-            item_type_tag = tag_parts[0]
-            item_price = int(tag_parts[1])
+
+            # =================================================================
+            # <<< ✅✅✅ CORREÇÃO DO 'effect_tag' NULO ✅✅✅ >>>
+            # =================================================================
+            
+            # Usar .get() é mais seguro, previne KeyError se a coluna não existir
+            effect_tag = item.get('effect_tag') 
+            
+            if not effect_tag:
+                await ctx.send(f"Erro de Jogo: O item `{item['name']}` tem um `effect_tag` (etiqueta de efeito) inválido (NULO) no banco de dados. Este item não pode ser comprado.")
+                return
+
+            try:
+                # Tenta extrair o Tipo e o Preço
+                tag_parts = effect_tag.split(':')
+                item_type_tag = tag_parts[0]
+                item_price = int(tag_parts[1])
+            except (ValueError, IndexError):
+                # Falha se 'effect_tag' for "STORABLE" (sem :PREÇO) ou "TEXTO_MAL_FORMATADO"
+                await ctx.send(f"Erro de Jogo: O item `{item['name']}` tem um `effect_tag` mal formatado (`{effect_tag}`). O formato esperado é 'TIPO:PREÇO' (ex: 'STORABLE:5000').")
+                return
+            # =================================================================
+            # <<< FIM DA CORREÇÃO >>>
+            # =================================================================
 
             current_money = await self.get_player_money(ctx.author.id)
             if current_money < item_price:
@@ -219,7 +257,6 @@ class ShopCog(commands.Cog):
 
                 pokemon_db_id = pokemon_res.data['id']
                 
-                # ✅ CORREÇÃO: Usa o 'api_name' para o contexto
                 item_api_name = item.get('api_name')
                 if not item_api_name:
                      await ctx.send(f"Erro de Jogo: O item `{item['name']}` não tem um `api_name` e não pode ser usado.")
@@ -265,7 +302,7 @@ class ShopCog(commands.Cog):
     @commands.command(name='givemoney', help='(Admin) Adiciona dinheiro ao seu perfil.')
     @commands.is_owner()
     async def give_money(self, ctx: commands.Context, amount: int):
-        # ... (código existente, sem alterações) ...
+        """(Admin) Dá dinheiro para o jogador."""
         if amount <= 0:
             await ctx.send("A quantia deve ser um número positivo.")
             return
