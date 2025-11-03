@@ -20,11 +20,6 @@ def get_supabase_client():
     key: str = os.environ.get("SUPABASE_KEY")
     return create_client(url, key)
 
-# =================================================================
-# <<< FUNÇÕES DE API (get_species, get_data, find_details) REMOVIDAS >>>
-# Elas não são mais necessárias aqui.
-# =================================================================
-
 # --- Cog Class ---
 
 class ShopCog(commands.Cog):
@@ -65,7 +60,6 @@ class ShopCog(commands.Cog):
 
     async def add_item_to_inventory(self, player_id: int, item_id: int, quantity: int = 1):
         """Adiciona um item ao inventário do jogador (upsert)."""
-        # (Mantendo sua lógica de upsert corrigida)
         try:
             current_response = self.supabase.table('player_inventory') \
                 .select('quantity') \
@@ -91,17 +85,44 @@ class ShopCog(commands.Cog):
             print(f"Erro ao adicionar item ao inventário: {e}")
             return False
 
+    # =================================================================
+    # <<< COMANDO !shop ATUALIZADO >>>
+    # =================================================================
     @commands.command(name='shop', help='Mostra a loja de itens.')
-    async def shop(self, ctx: commands.Context):
-        # ... (Código do !shop sem alterações) ...
+    async def shop(self, ctx: commands.Context, *, category: str = None):
+        """Mostra uma loja com itens do banco de dados, filtrada por categoria."""
+        
+        shop_map = {
+            '1': 'common', 'comuns': 'common',
+            '2': 'special', 'especiais': 'special',
+            '3': 'evolution', 'evolutivos': 'evolution'
+        }
+        
+        db_filter_type = None
+        if category:
+            db_filter_type = shop_map.get(category.lower())
+
+        # Se nenhuma categoria foi dada ou a categoria é inválida, mostra o menu
+        if not db_filter_type:
+            embed = discord.Embed(title="🛒 Loja Pokémon 🛒", color=discord.Color.blue())
+            embed.description = "Bem-vindo! Use `!shop <categoria>` para ver os itens."
+            embed.add_field(name="`!shop 1` ou `!shop comuns`", value="Itens de Batalha (Pokeballs, Potions...)", inline=False)
+            embed.add_field(name="`!shop 2` ou `!shop especiais`", value="Itens Raros (Heart Scales, Itens de Troca...)", inline=False)
+            embed.add_field(name="`!shop 3` ou `!shop evolutivos`", value="Itens de Evolução (Pedras, Itens Seguráveis...)", inline=False)
+            embed.set_footer(text="Para comprar, use !buy \"Nome do Item\"")
+            await ctx.send(embed=embed)
+            return
+
+        # Se a categoria é válida, busca os itens
         try:
-            response = self.supabase.table('items').select('*').in_('type', ['evolution', 'utility']).execute()
+            response = self.supabase.table('items').select('*').eq('type', db_filter_type).order('name', desc=False).execute()
+            
             if not response.data:
-                await ctx.send("A loja está vazia no momento.")
+                await ctx.send(f"A categoria '{db_filter_type}' está vazia no momento.")
                 return
 
-            embed = discord.Embed(title="🛒 Loja Pokémon 🛒", color=discord.Color.blue())
-            embed.description = "Use `!buy \"Nome do Item\" [Nome do Pokémon]`."
+            embed = discord.Embed(title=f"🛒 Loja: {db_filter_type.capitalize()} 🛒", color=discord.Color.blue())
+            embed.description = f"Itens disponíveis. Use `!buy \"Nome do Item\"`."
             
             for item in response.data:
                 try:
@@ -115,13 +136,17 @@ class ShopCog(commands.Cog):
             await ctx.send(embed=embed)
         except Exception as e:
             await ctx.send(f"Ocorreu um erro ao carregar a loja: {e}")
+    # =================================================================
+    # <<< FIM DA ATUALIZAÇÃO DO !shop >>>
+    # =================================================================
 
     @commands.command(name='bag', help='Mostra seu inventário.')
     async def bag(self, ctx: commands.Context):
-        # ... (Código do !bag sem alterações) ...
+        """Exibe o inventário do jogador."""
         try:
+            # Faz um JOIN para pegar os nomes dos itens
             response = self.supabase.table('player_inventory') \
-                .select('quantity, items(name, description)') \
+                .select('quantity, items(name, description, type)') \
                 .eq('player_id', ctx.author.id) \
                 .execute()
 
@@ -131,13 +156,26 @@ class ShopCog(commands.Cog):
 
             embed = discord.Embed(title=f"🎒 Inventário de {ctx.author.display_name}", color=discord.Color.orange())
             
-            description = []
+            # Separa os itens por categoria
+            bag_items = {'common': [], 'special': [], 'evolution': [], 'other': []}
+            
             for item_entry in response.data:
                 item = item_entry['items']
                 quantity = item_entry['quantity']
-                description.append(f"**{item['name']}** (x{quantity})\n_{item['description']}_")
+                item_type = item.get('type', 'other')
+                
+                item_str = f"**{item['name']}** (x{quantity})\n"
+                bag_items.get(item_type, bag_items['other']).append(item_str)
             
-            embed.description = "\n\n".join(description)
+            if bag_items['common']:
+                embed.add_field(name="Itens Comuns", value="".join(bag_items['common']), inline=False)
+            if bag_items['evolution']:
+                embed.add_field(name="Itens Evolutivos", value="".join(bag_items['evolution']), inline=False)
+            if bag_items['special']:
+                embed.add_field(name="Itens Especiais", value="".join(bag_items['special']), inline=False)
+            if bag_items['other']:
+                embed.add_field(name="Outros", value="".join(bag_items['other']), inline=False)
+
             await ctx.send(embed=embed)
         except Exception as e:
             await ctx.send(f"Ocorreu um erro ao abrir sua mochila: {e}")
@@ -147,15 +185,16 @@ class ShopCog(commands.Cog):
         """Compra um item da loja. Requer o nome do Pokémon para itens de evolução."""
         try:
             # 1. Buscar o item na loja
+            # (Removemos o .strip('"') do item_name, pois o !shop agora mostra os nomes corretos)
             item_res = self.supabase.table('items').select('*').ilike('name', item_name).single().execute()
             if not item_res.data:
-                await ctx.send(f"O item `{item_name}` não existe na loja.")
+                await ctx.send(f"O item `{item_name}` não existe na loja. Verifique o nome e use aspas se necessário.")
                 return
             
             item = item_res.data
             item_id = item['id']
             tag_parts = item['effect_tag'].split(':')
-            item_type = tag_parts[0]
+            item_type_tag = tag_parts[0]
             item_price = int(tag_parts[1])
 
             # 2. Verificar dinheiro do jogador
@@ -167,20 +206,16 @@ class ShopCog(commands.Cog):
             # 3. Processar a compra com base no tipo
             
             # --- TIPO 1: Item de Evolução (Uso imediato) ---
-            if item_type == 'EVO_ITEM':
+            if item_type_tag == 'EVO_ITEM':
                 if not pokemon_name:
-                    await ctx.send(f"O item `{item_name}` é um item de evolução. Você precisa especificar em qual Pokémon usá-lo.\nEx: `!buy \"{item_name}\" {ctx.author.display_name}`")
+                    await ctx.send(f"O item `{item_name}` é de uso imediato. Você precisa especificar em qual Pokémon usá-lo.\nEx: `!buy \"{item_name}\" Eevee`")
                     return
                 
                 if not self.evolve_pokemon_func:
                     await ctx.send("Erro: O sistema de evolução não está online. Tente novamente mais tarde.")
                     return
 
-                # ========================================================
-                # <<< LÓGICA DE EVOLUÇÃO REFATORADA >>>
-                # ========================================================
-                
-                # 1. Encontra o Pokémon
+                # Lógica de evolução centralizada (como na refatoração anterior)
                 pokemon_res = self.supabase.table('player_pokemon').select('id').eq('player_id', ctx.author.id).ilike('nickname', pokemon_name.strip()).single().execute()
                 if not pokemon_res.data:
                     await ctx.send(f"Não encontrei um Pokémon chamado `{pokemon_name}` na sua equipe.")
@@ -188,11 +223,9 @@ class ShopCog(commands.Cog):
 
                 pokemon_db_id = pokemon_res.data['id']
 
-                # 2. Monta o contexto (normaliza o nome do item)
-                item_api_name = item['name'].lower().replace(' ', '-')
+                item_api_name = item['name'].lower().replace("'", "").replace(" ", "-") # Ex: King's Rock -> kings-rock
                 context = {"item_name": item_api_name}
                 
-                # 3. Chama o "Cérebro" Central
                 evo_result = await evolution_utils.check_evolution(
                     supabase=self.supabase,
                     pokemon_db_id=pokemon_db_id,
@@ -201,20 +234,14 @@ class ShopCog(commands.Cog):
                 )
 
                 if evo_result:
-                    # 4. Pagamento e Evolução
                     await self.update_player_money(ctx.author.id, current_money - item_price)
                     await self.evolve_pokemon_func(ctx.author.id, pokemon_db_id, evo_result['new_name'], ctx.channel)
                     await ctx.send(f"Você gastou ${item_price:,} no item **{item['name']}**.")
                 else:
-                    await ctx.send(f"O item **{item_name}** não parece ter efeito em **{pokemon_name}**.")
-                
-                # ========================================================
-                # <<< FIM DA REFATORAÇÃO >>>
-                # ========================================================
+                    await ctx.send(f"O item **{item['name']}** não parece ter efeito em **{pokemon_name}**.")
 
             # --- TIPO 2: Item Armazenável (Guarda no inventário) ---
-            elif item_type == 'STORABLE':
-                # ... (Código de item armazenável sem alterações) ...
+            elif item_type_tag == 'STORABLE':
                 success_money = await self.update_player_money(ctx.author.id, current_money - item_price)
                 if not success_money:
                     await ctx.send("Ocorreu um erro ao processar seu pagamento.")
@@ -238,18 +265,21 @@ class ShopCog(commands.Cog):
     @commands.command(name='givemoney', help='(Admin) Adiciona dinheiro ao seu perfil.')
     @commands.is_owner()
     async def give_money(self, ctx: commands.Context, amount: int):
-        # ... (Código do !givemoney sem alterações) ...
+        """(Admin) Dá dinheiro para o jogador."""
         if amount <= 0:
             await ctx.send("A quantia deve ser um número positivo.")
             return
+
         try:
             current_money = await self.get_player_money(ctx.author.id)
             new_amount = current_money + amount
             success = await self.update_player_money(ctx.author.id, new_amount)
+            
             if success:
                 await ctx.send(f"💸 Você adicionou ${amount:,} à sua conta! Novo saldo: ${new_amount:,}.")
             else:
                 await ctx.send("Falha ao atualizar o dinheiro no banco de dados.")
+        
         except Exception as e:
             await ctx.send(f"Ocorreu um erro inesperado: {e}")
             print(f"Erro no !givemoney: {e}")
