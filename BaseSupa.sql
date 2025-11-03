@@ -7,6 +7,7 @@ CREATE TABLE public.items (
   type text NOT NULL,
   description text,
   effect_tag text,
+  required_badges integer NOT NULL DEFAULT 0,
   CONSTRAINT items_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.npc_pokemon_party (
@@ -60,6 +61,10 @@ CREATE TABLE public.player_pokemon (
   special_defense integer DEFAULT 0,
   speed integer DEFAULT 0,
   moves jsonb DEFAULT '[null, null, null, null]'::jsonb,
+  happiness integer DEFAULT 70,
+  held_item text,
+  gender text DEFAULT 'genderless'::text,
+  pokemon_pokedex_id integer,
   CONSTRAINT player_pokemon_pkey PRIMARY KEY (id),
   CONSTRAINT player_pokemon_player_id_fkey FOREIGN KEY (player_id) REFERENCES public.players(discord_id)
 );
@@ -79,5 +84,6 @@ CREATE TABLE public.players (
   badges integer NOT NULL DEFAULT 0,
   current_region text DEFAULT 'Pallet Town'::text,
   masterballs_owned integer NOT NULL DEFAULT 0,
+  current_location_name text DEFAULT 'pallet-town'::text,
   CONSTRAINT players_pkey PRIMARY KEY (discord_id)
 );
