@@ -5,13 +5,11 @@ from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
 import asyncio
-import json # Importado para o debug
+import json 
 
-# Importa nossos helpers
-# Agora usamos mais funções do pokeapi_service
 import utils.pokeapi_service as pokeapi
 
-# --- HELPER: Barra de Progresso (Corrigida na última interação) ---
+# --- HELPER: Barra de Progresso (Corrigida) ---
 def _create_progress_bar(
     current: int, 
     total: int, 
@@ -23,7 +21,9 @@ def _create_progress_bar(
     if total <= 0:
         return f"[{emojis[0] * bar_length}]\nProgresso Inicial!"
     
-    current = min(current, total)
+    # Garante que 'current' nunca seja menor que 0
+    current = max(0, min(current, total))
+    
     percent = float(current) / total
     filled = int(bar_length * percent)
     empty = bar_length - filled
@@ -36,7 +36,7 @@ def _create_progress_bar(
 class TeamNavigationView(ui.View):
     def __init__(self, cog: commands.Cog, player_id: int, current_slot: int, max_slot: int, full_team_data_db: list):
         super().__init__(timeout=600)
-        self.cog = cog # 'self.cog' aqui está correto, refere-se ao TeamCog
+        self.cog = cog 
         self.player_id = player_id
         self.current_slot = current_slot
         self.max_slot = max_slot
@@ -55,19 +55,16 @@ class TeamNavigationView(ui.View):
         await interaction.response.defer(ephemeral=False)
         
         try:
-            # 'self.cog' aqui está correto, chamando o método do TeamCog
             self.full_team_data_db = self.cog._get_player_team_sync(self.player_id)
             
             focused_db_data = self.full_team_data_db[self.current_slot - 1]
             
-            # 'self.cog' aqui está correto
             focused_pokemon = await self.cog._get_focused_pokemon_details(focused_db_data)
             
             if not focused_pokemon:
                 await interaction.followup.send("Erro ao buscar dados do Pokémon principal da PokeAPI.", ephemeral=True)
                 return
             
-            # 'self.cog' aqui está correto
             embed = await self.cog._build_team_embed(focused_pokemon, self.full_team_data_db, self.current_slot)
             
             self._update_buttons()
@@ -130,9 +127,19 @@ class TeamCog(commands.Cog):
         if not api_data:
             return None
         
-        species_data = await pokeapi.get_pokemon_species_data(p_mon_db['pokemon_api_name'])
+        # ✅ CORREÇÃO: Busca o nome da espécie base (ex: 'zygarde') a partir dos dados do Pokémon (ex: 'zygarde-50')
+        base_species_name = api_data.get('species', {}).get('name')
+        if not base_species_name:
+            # Fallback para o caso de a API falhar (improvável)
+            base_species_name = p_mon_db['pokemon_api_name']
+
+        # 1. Busca dados da espécie (para tradução e XP)
+        #    Usa o nome da espécie base (base_species_name)
+        species_data = await pokeapi.get_pokemon_species_data(base_species_name)
+        
         flavor_text = pokeapi.get_portuguese_flavor_text(species_data) if species_data else "Descrição não encontrada."
 
+        # --- Lógica de Shiny ---
         is_shiny = p_mon_db.get('is_shiny', False)
         artwork_sprites = api_data.get('sprites', {}).get('other', {}).get('official-artwork', {})
         
@@ -143,10 +150,13 @@ class TeamCog(commands.Cog):
 
         if not sprite_url:
             sprite_url = api_data.get('sprites', {}).get('front_shiny') if is_shiny else api_data.get('sprites', {}).get('front_default', '')
+        # --- Fim da Lógica de Shiny ---
 
+        # --- Lógica de XP ---
         xp_for_next_level = float('inf') 
         xp_for_current_level = 0       
         
+        # ✅ CORREÇÃO: Esta checagem agora funciona, pois 'species_data' não será None
         if species_data and 'growth_rate' in species_data:
             growth_rate_url = species_data['growth_rate']['url']
             current_level = p_mon_db['current_level']
@@ -155,6 +165,7 @@ class TeamCog(commands.Cog):
             
             if current_level > 1:
                 xp_for_current_level = await pokeapi.get_total_xp_for_level(growth_rate_url, current_level)
+        # --- Fim da Lógica de XP ---
 
         return {
             "db_data": p_mon_db,
@@ -167,6 +178,7 @@ class TeamCog(commands.Cog):
         }
         
     async def _build_team_embed(self, focused_pokemon_details: dict, full_team_db: list, focused_slot: int) -> discord.Embed:
+        # (Esta função não precisa de mudanças, ela apenas reflete os dados)
         db_data = focused_pokemon_details['db_data']
         api_data = focused_pokemon_details['api_data']
         
@@ -193,6 +205,7 @@ class TeamCog(commands.Cog):
         )
         
         xp_emojis = ('🟦', '⬛')
+        
         current_total_xp = db_data['current_xp']
         xp_base_level = focused_pokemon_details['xp_for_current_level']
         xp_prox_level = focused_pokemon_details['xp_for_next_level']
@@ -251,19 +264,13 @@ class TeamCog(commands.Cog):
             
             await msg.edit(content=f"Buscando dados de **{focused_db_data['nickname'].capitalize()}**...")
             
-            # ✅ CORREÇÃO: O erro era 'self.cog._get...'. 
-            # 'self' já é o Cog, então usamos 'self._get...'
             focused_pokemon = await self._get_focused_pokemon_details(focused_db_data)
             
             if not focused_pokemon:
                 await msg.edit(content="Erro ao buscar dados do Pokémon principal da PokeAPI.")
                 return
             
-            # ✅ CORREÇÃO: O erro era 'self.cog._build...'. 
-            # 'self' já é o Cog, então usamos 'self._build...'
             embed = await self._build_team_embed(focused_pokemon, full_team_data_db, focused_slot)
-            
-            # Aqui 'self' (o TeamCog) é passado para a View, que o armazena como 'cog'
             view = TeamNavigationView(self, player_id, focused_slot, max_slot, full_team_data_db)
             
             await msg.edit(content=None, embed=embed, view=view)

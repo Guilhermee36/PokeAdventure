@@ -20,33 +20,56 @@ def get_supabase_client():
     key: str = os.environ.get("SUPABASE_KEY")
     return create_client(url, key)
 
-# (Função add_pokemon_to_player permanece a mesma)
+# (Função add_pokemon_to_player ATUALIZADA)
 async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: int = 5, captured_at: str = "Início da Jornada") -> dict:
-    # ... (código existente, sem alterações)
     supabase = get_supabase_client()
     try:
         count_response = supabase.table("player_pokemon").select("id", count='exact').eq("player_id", player_id).filter("party_position", "not.is", "null").execute()
         pokemon_count_in_party = count_response.count
     except Exception as e:
         return {'success': False, 'error': f"Erro ao contar Pokémon: {e}"}
+        
     party_position = None 
     is_going_to_box = True
     if pokemon_count_in_party < 6:
         party_position = pokemon_count_in_party + 1
         is_going_to_box = False
+        
     poke_data = await pokeapi.get_pokemon_data(pokemon_api_name)
     if not poke_data:
         return {'success': False, 'error': f"Pokémon '{pokemon_api_name}' não encontrado na API."}
+        
     is_shiny = random.randint(1, 4096) == 1
     calculated_stats = pokeapi.calculate_stats_for_level(poke_data['stats'], level)
     initial_moves = pokeapi.get_initial_moves(poke_data, level)
+    
+    # --- LÓGICA DE GÊNERO E XP INICIAL (CORRIGIDA) ---
     gender_ratio = -1
-    species_data = await pokeapi.get_pokemon_species_data(pokemon_api_name)
+    starting_xp = 0 # <-- Padrão
+    
+    # ✅ CORREÇÃO: Busca o nome da espécie base (ex: 'zygarde') a partir dos dados do Pokémon (ex: 'zygarde-50')
+    base_species_name = poke_data.get('species', {}).get('name')
+    if not base_species_name:
+        base_species_name = pokemon_api_name # Fallback
+    
+    # Usa o nome da espécie base (base_species_name)
+    species_data = await pokeapi.get_pokemon_species_data(base_species_name)
+    
     if species_data:
         gender_ratio = species_data.get('gender_rate', -1)
+        
+        # ✅ CORREÇÃO: Esta checagem agora funciona
+        if 'growth_rate' in species_data and level > 1:
+            growth_rate_url = species_data['growth_rate']['url']
+            xp_for_level = await pokeapi.get_total_xp_for_level(growth_rate_url, level)
+            if xp_for_level != float('inf'):
+                starting_xp = xp_for_level
+    # --- FIM DA LÓGICA CORRIGIDA ---
+                
     gender = 'genderless'
     if gender_ratio != -1:
         gender = 'female' if random.randint(1, 8) <= gender_ratio else 'male'
+        
     new_pokemon_data = { 
         "player_id": player_id, 
         "pokemon_api_name": pokemon_api_name, 
@@ -57,12 +80,13 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
         "party_position": party_position, 
         "current_level": level, 
         "current_hp": calculated_stats['max_hp'],
-        "current_xp": 0,
+        "current_xp": starting_xp, # Usa a XP inicial calculada
         "moves": initial_moves,
         "gender": gender, 
         "happiness": 70, 
         **calculated_stats 
     }
+    
     try:
         insert_response = supabase.table("player_pokemon").insert(new_pokemon_data).execute()
         if len(insert_response.data) > 0:
@@ -78,9 +102,8 @@ async def add_pokemon_to_player(player_id: int, pokemon_api_name: str, level: in
 
 
 # --- Classes de UI (StartJourneyView, TrainerNameModal, etc.) ---
-# ... (Todas as suas classes de UI (StartJourneyView, TrainerNameModal, 
-# StarterSelectView, RegionSelectView, ConfirmDeleteView)
-# permanecem aqui, sem alterações) ...
+# (O restante do arquivo player_cog.py permanece o mesmo)
+
 class StartJourneyView(ui.View):
     def __init__(self, supabase_client: Client):
         super().__init__(timeout=None)
@@ -226,17 +249,8 @@ class PlayerCog(commands.Cog):
         response = self.supabase.table('players').select('discord_id').eq('discord_id', discord_id).execute()
         return bool(response.data)
 
-    # =================================================================
-    # <<< FUNÇÕES AUXILIARES DE INVENTÁRIO (ATUALIZADAS) >>>
-    # =================================================================
-    
     async def _find_item_in_db(self, item_name: str) -> dict | None:
-        """
-        Helper para buscar o ID, nome de exibição e NOME DE API
-        de um item pelo nome de exibição (case-insensitive)
-        """
         try:
-            # ✅ CORREÇÃO: Busca 'id', 'name' (exibição) e 'api_name' (lógica)
             res = self.supabase.table('items') \
                 .select('id, name, api_name') \
                 .ilike('name', item_name) \
@@ -247,10 +261,7 @@ class PlayerCog(commands.Cog):
             print(f"Erro ao buscar item_id por nome: {e}")
             return None
 
-    # (Funções _add_item_to_inventory_by_id e _remove_item_from_inventory_by_id
-    # permanecem iguais, pois elas operam por ID, o que está correto)
     async def _add_item_to_inventory_by_id(self, player_id: int, item_id: int, quantity: int = 1):
-        # ... (código existente, sem alterações) ...
         try:
             current_response = self.supabase.table('player_inventory') \
                 .select('quantity') \
@@ -275,7 +286,6 @@ class PlayerCog(commands.Cog):
             return False
 
     async def _remove_item_from_inventory_by_id(self, player_id: int, item_id: int, quantity_to_remove: int = 1) -> bool:
-        # ... (código existente, sem alterações) ...
         try:
             current_response = self.supabase.table('player_inventory') \
                 .select('quantity') \
@@ -302,14 +312,8 @@ class PlayerCog(commands.Cog):
             print(f"Erro ao remover item do inventário (PlayerCog): {e}")
             return False
             
-    # =================================================================
-    # <<< FIM DAS FUNÇÕES AUXILIARES >>>
-    # =================================================================
-
     # --- Comandos do Jogador ---
 
-    # ... (!start, !profile, !delete, !help permanecem os mesmos) ...
-    # (O !help já estava correto)
     @commands.command(name='start')
     async def start_adventure(self, ctx: commands.Context):
         if await self.player_exists(ctx.author.id):
@@ -370,31 +374,25 @@ class PlayerCog(commands.Cog):
             return
 
         player_id = ctx.author.id
-
-        # 1. Encontrar o item NO BANCO DE DADOS (para pegar ID, nome real e api_name)
         item_db_data = await self._find_item_in_db(item_name)
         if not item_db_data:
             await ctx.send(f"O item `{item_name}` não parece existir.")
             return
         
         item_db_id = item_db_data['id']
-        item_db_name = item_db_data['name'] # Nome de exibição (ex: "Pedra da Água")
-        # ✅ CORREÇÃO: Pega o nome de lógica (ex: "water-stone")
+        item_db_name = item_db_data['name']
         item_api_name = item_db_data.get('api_name') 
 
         if not item_api_name:
             await ctx.send(f"Erro de Jogo: O item `{item_db_name}` não tem um `api_name` configurado no DB e não pode ser usado.")
             return
 
-        # 2. Tentar remover o item do inventário
         removed_from_bag = await self._remove_item_from_inventory_by_id(player_id, item_db_id, 1)
         if not removed_from_bag:
             await ctx.send(f"Você não tem o item `{item_db_name}` na sua bolsa para usar.")
             return
 
-        # 3. Encontrar o Pokémon
         try:
-            # (O restante desta seção permanece o mesmo)
             query = self.supabase.table("player_pokemon").select("*").eq("player_id", player_id)
             query = query.or_(f"nickname.ilike.{pokemon_identifier},pokemon_api_name.ilike.{pokemon_identifier}")
             response = query.execute()
@@ -414,11 +412,8 @@ class PlayerCog(commands.Cog):
             await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
             return
 
-        # 4. Montar o contexto para o 'evolution_utils'
-        # ✅ CORREÇÃO: Usa o 'item_api_name' do DB
         context = {"item_name": item_api_name}
         
-        # 5. Chamar o utilitário
         try:
             evo_result = await evolution_utils.check_evolution(
                 self.supabase,
@@ -433,11 +428,9 @@ class PlayerCog(commands.Cog):
                     await self._add_item_to_inventory_by_id(player_id, item_db_id, 1)
                     return
                 
-                # Sucesso! Item foi consumido.
                 await self.evolve_pokemon_func(player_id, pokemon_db_id, evo_result['new_name'], ctx.channel)
             else:
                 await ctx.send("Não teve efeito.")
-                # Devolve o item, pois não foi usado
                 await self._add_item_to_inventory_by_id(player_id, item_db_id, 1)
                 
         except Exception as e:
@@ -459,30 +452,25 @@ class PlayerCog(commands.Cog):
         
         player_id = ctx.author.id
 
-        # 1. Encontrar o item NO BANCO DE DADOS (para pegar ID, nome e api_name)
         item_db_data = await self._find_item_in_db(item_name)
         if not item_db_data:
             await ctx.send(f"O item `{item_name}` não parece existir.")
             return
         
         item_db_id = item_db_data['id']
-        item_db_name = item_db_data['name'] # Nome de exibição (ex: "Metal Coat")
-        # ✅ CORREÇÃO: Pega o nome de lógica (ex: "metal-coat")
+        item_db_name = item_db_data['name']
         item_api_name = item_db_data.get('api_name')
 
         if not item_api_name:
             await ctx.send(f"Erro de Jogo: O item `{item_db_name}` não tem um `api_name` e não pode ser equipado.")
             return
 
-        # 2. Tentar remover o item do inventário
         removed_from_bag = await self._remove_item_from_inventory_by_id(player_id, item_db_id, 1)
         if not removed_from_bag:
             await ctx.send(f"Você não tem o item `{item_db_name}` na sua bolsa para equipar.")
             return
 
-        # 3. Encontrar o Pokémon
         try:
-            # (O restante desta seção permanece o mesmo)
             query = self.supabase.table("player_pokemon").select("id, nickname, held_item").eq("player_id", player_id)
             query = query.or_(f"nickname.ilike.{pokemon_identifier},pokemon_api_name.ilike.{pokemon_identifier}")
             pkmn_res = query.execute()
@@ -505,19 +493,14 @@ class PlayerCog(commands.Cog):
             await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
             return
 
-        # 4. Equipar o novo item (Atualiza o campo 'held_item' com o api_name)
         try:
-            # ✅ CORREÇÃO: Salva o 'item_api_name' (ex: "metal-coat")
             self.supabase.table('player_pokemon').update({'held_item': item_api_name}).eq('id', pokemon_db_id).execute()
         except Exception as e:
             await ctx.send(f"Erro ao equipar o item: {e}")
             await self._add_item_to_inventory_by_id(player_id, item_db_id, 1) # Devolve o item
             return
 
-        # 5. Devolver o item antigo (se houver)
         if old_held_item_name:
-            # Encontra o ID do item antigo pelo SEU 'api_name'
-            # (Assumindo que o que estava salvo era o 'api_name')
             old_item_res = self.supabase.table('items').select('id, name').eq('api_name', old_held_item_name).single().execute()
             
             if old_item_res.data:
@@ -525,15 +508,11 @@ class PlayerCog(commands.Cog):
                 await self._add_item_to_inventory_by_id(player_id, old_item_db_data['id'], 1)
                 await ctx.send(f"✅ Você equipou **{item_db_name}** em **{pokemon_nickname}**! O item **{old_item_db_data['name']}** foi devolvido para sua bolsa.")
             else:
-                # Se não achou (ex: era um "Metal Coat" capitalizado de antes),
-                # apenas informa o sucesso sem devolução.
                 await ctx.send(f"✅ Você equipou **{item_db_name}** em **{pokemon_nickname}**! (O item antigo '{old_held_item_name}' não foi encontrado no DB e não pôde ser devolvido).")
         else:
             await ctx.send(f"✅ Você equipou **{item_db_name}** em **{pokemon_nickname}**!")
 
     # --- Comandos de Admin ---
-
-    # ... (!addpokemon permanece o mesmo) ...
     @commands.command(name='addpokemon')
     @commands.is_owner()
     async def add_pokemon(self, ctx: commands.Context, pokemon_name: str, level: int = 5):
