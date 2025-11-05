@@ -529,6 +529,35 @@ class PlayerCog(commands.Cog):
             await ctx.send(f"✅ {pokemon_name.capitalize()} foi adicionado ao seu time! {result['message']}")
         else:
             await ctx.send(f"❌ Erro: {result['error']}")
+            
+    @commands.command(name='settime', help='(Admin) Define a hora do dia no jogo.')
+    @commands.is_owner()
+    async def set_time(self, ctx: commands.Context, time_of_day: str):
+        """Define a hora do jogo (day/night) para o jogador."""
+        
+        time_of_day = time_of_day.lower()
+        
+        if time_of_day not in ['day', 'night']:
+            await ctx.send("Formato incorreto. Use `!settime day` ou `!settime night`.")
+            return
+            
+        player_id = ctx.author.id
+
+        try:
+            # Atualiza a coluna 'game_time_of_day' na tabela 'players'
+            self.supabase.table('players') \
+                .update({'game_time_of_day': time_of_day}) \
+                .eq('discord_id', player_id) \
+                .execute()
+            
+            if time_of_day == 'day':
+                await ctx.send("☀️ O sol nasceu. O jogo agora está de **dia**.")
+            else:
+                await ctx.send("🌙 A lua subiu. O jogo agora está de **noite**.")
+                
+        except Exception as e:
+            await ctx.send(f"Ocorreu um erro ao definir a hora: {e}")
+            print(f"Erro no !settime: {e}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(PlayerCog(bot))

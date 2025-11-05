@@ -45,14 +45,13 @@ def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) ->
     # Condição 2: Felicidade Mínima
     min_happiness = details.get("min_happiness")
     if min_happiness:
+        # Puxa a coluna 'happiness' do DB
         if pkmn_data.get("happiness", 70) < min_happiness:
             return False
             
     # Condição 3: Item Segurado
-    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'held_item' for null
     held_item = (details.get("held_item") or {}).get("name")
     if held_item:
-        # 'held_item' no DB deve ser o 'api_name' (ex: "metal-coat")
         if pkmn_data.get("held_item") != held_item:
             return False 
             
@@ -62,14 +61,13 @@ def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) ->
         return False 
         
     # Condição 5: Conhecer um Ataque
-    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'known_move' for null
     known_move = (details.get("known_move") or {}).get("name")
     if known_move:
+        # Puxa a coluna 'moves' (JSONB) do DB
         if known_move not in pkmn_data.get("moves", []):
             return False
             
     # Condição 6: Tipo na Equipe
-    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'party_type' for null
     party_type = (details.get("party_type") or {}).get("name")
     if party_type:
         if party_type not in context.get("party_types", []):
@@ -92,7 +90,6 @@ def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) ->
         if stat_comparison == 0 and not (atk == defense): return False
         
     # Condição 9: Localização
-    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'location' for null
     location = (details.get("location") or {}).get("name")
     if location:
         if context.get("current_location_name") != location:
@@ -114,11 +111,7 @@ def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict, ne
     if not item_used:
         return False
 
-    # --- Condição Principal: Item usado bate com o item esperado? ---
-    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'item' for null
     item_needed = (details.get("item") or {}).get("name") # Este é o 'api_name' da PokeAPI
-    
-    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'trigger' for null
     trigger_name = (details.get("trigger") or {}).get("name")
     
     # --- Casos Especiais (Workarounds) ---
@@ -130,8 +123,6 @@ def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict, ne
     is_runerigus_fragment = (new_species_name == "runerigus" and item_used == "fragmento-de-tumba")
     is_basculegion_soul = (new_species_name == "basculegion" and item_used == "alma-perdida")
     
-    # Se não for o item correto (ex: item_used 'water-stone' == item_needed 'water-stone')
-    # E não for nenhum dos nossos casos especiais, falha.
     if (item_needed and item_used != item_needed) and \
        not is_link_cable_trade and \
        not is_inkay_scroll and \
@@ -155,8 +146,6 @@ def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict, ne
         return False 
 
     # Condição 4: Localização (Ex: Eevee -> Leafeon/Glaceon)
-    # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'location' for null
-    # (Embora seja raro em item_use, é uma boa prática)
     location = (details.get("location") or {}).get("name")
     if location:
         if context.get("current_location_name") != location:
@@ -164,7 +153,6 @@ def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict, ne
             
     # Condição 5: Item Segurado (Exclusivo do Link Cable)
     if is_link_cable_trade:
-        # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'held_item' for null
         item_needed_to_hold = (details.get("held_item") or {}).get("name") # ex: "metal-coat"
         if item_needed_to_hold:
             if pkmn_data.get("held_item") != item_needed_to_hold:
@@ -202,7 +190,7 @@ async def check_evolution(
     if context is None:
         context = {}
     
-    # 1. Buscar dados do Pokémon
+    # 1. Buscar dados do Pokémon (Lê os dados frescos do DB)
     pkmn_response = supabase.table("player_pokemon").select("*").eq("id", pokemon_db_id).single().execute()
     if not pkmn_response.data:
         print(f"Evolução falhou: Pokémon com db_id {pokemon_db_id} não encontrado.")
@@ -231,10 +219,28 @@ async def check_evolution(
         # 5. Iterar sobre os detalhes
         for details in details_list:
             
-            # --- LÓGICA DE FILTRO CORRIGIDA ---
-            # ✅ CORREÇÃO: (details.get("chave") or {}) previne erro se 'trigger' for null
-            trigger_details = details.get("trigger") or {}
-            trigger_type = trigger_details.get("name") # ex: "level-up", "use-item", "trade"
+            # ==========================================================
+            # <<< ✅ CORREÇÃO DO CRASH (AttributeError) ✅ >>>
+            # (Corrige o bug visto em image_546be8.png)
+            # ==========================================================
+            
+            # Pega o dado do 'trigger'. Pode ser um objeto (padrão),
+            # uma string (como no seu screenshot) ou None.
+            trigger_data = details.get("trigger") 
+            trigger_type = None
+            
+            if isinstance(trigger_data, dict):
+                # Formato padrão da PokeAPI: {"name": "level-up", ...}
+                trigger_type = trigger_data.get("name")
+            elif isinstance(trigger_data, str):
+                # Formato visto no seu screenshot: "level-up"
+                trigger_type = trigger_data
+            
+            # Se trigger_data for None, trigger_type continuará None (e será ignorado)
+            
+            # ==========================================================
+            # <<< FIM DA CORREÇÃO DO CRASH >>>
+            # ==========================================================
             
             is_turn_upside_down = details.get("turn_upside_down", False)
 
@@ -243,6 +249,8 @@ async def check_evolution(
             if trigger_event == "level_up":
                 # Se o gatilho for level-up, SÓ checa evoluções de level-up
                 if trigger_type == "level_up":
+                    # Chama a função que verifica Riolu (happiness, time)
+                    # e Piloswine (known_move)
                     evolution_allowed = _check_level_up_conditions(details, context, pkmn)
             
             elif trigger_event == "item_use":
