@@ -1,216 +1,180 @@
-
 # utils/evolution_utils.py
 
-import utils.pokeapi_service as pokeapi
+import re
 from supabase import Client
-from postgrest import APIResponse
-import re 
+import utils.pokeapi_service as pokeapi
 
-# Cache para a cadeia de evolução
-_evo_chain_cache = {}
-API_GENDER_MAP = { 1: 'female', 2: 'male', 3: 'genderless' }
+# cache simples p/ chain
+_EVO_CHAIN_CACHE: dict[str, dict] = {}
+API_GENDER_MAP = {1: "female", 2: "male", 3: "genderless"}
 
 async def _get_evo_chain_data(url: str) -> dict | None:
-    """Busca dados da cadeia de evolução da API, com cache."""
-    if url in _evo_chain_cache:
-        return _evo_chain_cache[url]
+    if url in _EVO_CHAIN_CACHE:
+        return _EVO_CHAIN_CACHE[url]
     data = await pokeapi.get_data_from_url(url)
     if data:
-        _evo_chain_cache[url] = data
+        _EVO_CHAIN_CACHE[url] = data
     return data
 
 def _find_evolution_node(chain: dict, pokemon_name: str) -> dict | None:
-    """Encontra o nó da cadeia de evolução correspondente ao Pokémon atual."""
     if chain["species"]["name"] == pokemon_name:
         return chain
-    for evo in chain["evolves_to"]:
+    for evo in chain.get("evolves_to", []):
         found = _find_evolution_node(evo, pokemon_name)
         if found:
             return found
     return None
 
 def _get_species_id_from_url(url: str) -> int | None:
-    """Extrai o ID da espécie da URL da API."""
-    match = re.search(r"/pokemon-species/(\d+)/", url)
-    if match:
-        return int(match.group(1))
-    return None
+    m = re.search(r"/pokemon-species/(\d+)/", url)
+    return int(m.group(1)) if m else None
 
-def _check_level_up_conditions(details: dict, context: dict, pkmn_data: dict) -> bool:
-    """Verifica condições para evoluções do tipo 'level-up'."""
-    # Condição 1: Nível Mínimo
+# ---------- condições: level-up ----------
+def _check_level_up_conditions(details: dict, context: dict, pkmn: dict) -> bool:
+    # 1) min_level
     min_level = details.get("min_level")
-    if min_level and pkmn_data["current_level"] < min_level:
-        return False 
+    if min_level and pkmn["current_level"] < min_level:
+        return False
 
-    # Condição 2: Felicidade Mínima
+    # 2) min_happiness (coluna happiness)
     min_happiness = details.get("min_happiness")
-    if min_happiness:
-        if pkmn_data.get("happiness", 70) < min_happiness:
-            return False
-            
-    # Condição 3: Item Segurado
-    held_item = (details.get("held_item") or {}).get("name")
-    if held_item:
-        if pkmn_data.get("held_item") != held_item:
-            return False
+    if min_happiness and pkmn.get("happiness", 70) < min_happiness:
+        return False
 
-    # Condição 4: Movimento conhecido (known_move) e/ou known_move_type
+    # 3) held_item
+    held_item = (details.get("held_item") or {}).get("name")
+    if held_item and pkmn.get("held_item") != held_item:
+        return False
+
+    # 4) known_move / known_move_type
     known_move = (details.get("known_move") or {}).get("name")
-    if known_move:
-        moves_list = pkmn_data.get("moves", []) or []
-        if known_move not in moves_list:
-            return False
+    if known_move and known_move not in (pkmn.get("moves") or []):
+        return False
 
     known_move_type = (details.get("known_move_type") or {}).get("name")
-    if known_move_type:
-        move_types_list = pkmn_data.get("move_types", []) or []
-        if known_move_type not in move_types_list:
-            return False
+    if known_move_type and known_move_type not in (pkmn.get("move_types") or []):
+        return False
 
-    # Condição 5: Tempo do dia
+    # 5) hora do dia (context['time_of_day'] -> players.game_time_of_day)
     time_of_day = details.get("time_of_day")
-    if time_of_day:
-        if context.get("game_time_of_day") != time_of_day:
-            return False
+    if time_of_day and context.get("time_of_day") != time_of_day:
+        return False
 
-    # Condição 6: Afiliar partido (Beauty, Affection) — ignoradas por simplicidade
-    # Condição 7: Troca com parceiro específico — ignorada no level-up
+    # 6) gênero (coluna gender)
+    gender_id = details.get("gender")
+    if gender_id and pkmn.get("gender") != API_GENDER_MAP.get(gender_id):
+        return False
 
-    # Condição 8: Attack vs Defense (ex: Tyrogue)
-    relative_physical_stats = details.get("relative_physical_stats")
-    if relative_physical_stats is not None:
-        atk = pkmn_data.get("attack", 0)
-        defense = pkmn_data.get("defense", 0)
-        if relative_physical_stats == 1 and not (atk > defense): return False
-        if relative_physical_stats == -1 and not (atk < defense): return False
-        if relative_physical_stats == 0 and not (atk == defense): return False
-        
-    # Condição 9: Localização
+    # 7) atk vs def (usa attack/defense)
+    rel = details.get("relative_physical_stats")
+    if rel is not None:
+        atk = pkmn.get("attack", 0)
+        df = pkmn.get("defense", 0)
+        if rel == 1 and not (atk > df): return False
+        if rel == -1 and not (atk < df): return False
+        if rel == 0 and not (atk == df): return False
+
+    # 8) localização
     location = (details.get("location") or {}).get("name")
-    if location:
-        if context.get("current_location_name") != location:
-            return False
-            
-    # Condição 10: Inkay (ignorado no level-up, tratado com item)
+    if location and context.get("current_location_name") != location:
+        return False
+
+    # 9) upside_down (Inkay) não via level-up no seu jogo
     if details.get("turn_upside_down", False):
         return False
-        
-    return True 
 
-def _check_item_use_conditions(details: dict, context: dict, pkmn_data: dict, new_species_name: str) -> bool:
-    """
-    Verifica condições para evoluções do tipo 'item_use'.
-    Suporta condições múltiplas e itens customizados.
-    """
-    item_used = context.get("item_name")  # 'api_name' (ex: "water-stone")
+    return True
+
+# ---------- condições: uso de item ----------
+def _check_item_use_conditions(details: dict, context: dict, pkmn: dict, new_species: str) -> bool:
+    item_used = context.get("item_name")  # api_name do item usado
     if not item_used:
         return False
 
-    item_needed = (details.get("item") or {}).get("name")  # 'api_name' da PokeAPI
+    item_needed = (details.get("item") or {}).get("name")
     trigger_name = (details.get("trigger") or {}).get("name")
-    
-    # --- Casos Especiais (Workarounds) ---
+
     is_link_cable_trade = (trigger_name == "trade" and item_used == "link-cable")
     is_inkay_scroll = (details.get("turn_upside_down", False) and item_used == "topsy-turvy-scroll")
 
-    # 1) Evoluções padrão: usar pedra
-    if trigger_name == "use-item" and item_needed:
-        return item_used == item_needed
+    # se pede item específico (pedras), exige match, exceto se for um dos casos especiais
+    if (item_needed and item_used != item_needed) and not (is_link_cable_trade or is_inkay_scroll):
+        return False
 
-    # 2) Evolução por "trade" substituída por Link Cable
+    # filtros extra
+    gender_id = details.get("gender")
+    if gender_id and pkmn.get("gender") != API_GENDER_MAP.get(gender_id):
+        return False
+
+    time_of_day = details.get("time_of_day")
+    if time_of_day and context.get("time_of_day") != time_of_day:
+        return False
+
+    location = (details.get("location") or {}).get("name")
+    if location and context.get("current_location_name") != location:
+        return False
+
     if is_link_cable_trade:
-        return True
+        need_held = (details.get("held_item") or {}).get("name")
+        if need_held and pkmn.get("held_item") != need_held:
+            return False
 
-    # 3) Inkay "virar de ponta-cabeça" substituído por item custom
     if is_inkay_scroll:
-        return True
+        min_level = details.get("min_level")
+        if min_level and pkmn["current_level"] < min_level:
+            return False
 
-    # 4) Workarounds de level-up acionados via item (Sylveon etc.)
-    if trigger_name == "level-up":
-        # Reaproveita as mesmas checagens do level-up
-        return _check_level_up_conditions(details, context, pkmn_data)
+    return True
 
-    return False
-
+# ---------- função principal ----------
 async def check_evolution(
-    *, 
-    supabase: Client, 
-    pokemon_db_id: str, 
-    trigger_event: str, 
-    context: dict = None
+    *,
+    supabase: Client,
+    pokemon_db_id: str,
+    trigger_event: str,          # "level_up" | "item_use"
+    context: dict | None = None, # precisa conter: time_of_day, current_location_name, (opcional item_name)
 ) -> dict | None:
-    """
-    Verifica se um Pokémon pode evoluir com base em um gatilho.
-    """
-    if context is None:
-        context = {}
-    
-    # 1. Buscar dados do Pokémon (Lê os dados frescos do DB)
-    pkmn_response = supabase.table("player_pokemon").select("*").eq("id", pokemon_db_id).single().execute()
-    if not pkmn_response.data:
-        print(f"Evolução falhou: Pokémon com db_id {pokemon_db_id} não encontrado.")
+    context = context or {}
+
+    # lê mon do DB *(snake_case)*
+    res = supabase.table("player_pokemon").select("*").eq("id", pokemon_db_id).single().execute()
+    if not res.data:
         return None
-    pkmn = pkmn_response.data
+    pkmn = res.data
     current_name = pkmn["pokemon_api_name"]
 
-    # 2. Buscar dados da Espécie e Cadeia de Evolução
-    species_data = await pokeapi.get_pokemon_species_data(current_name)
-    if not species_data or "evolution_chain" not in species_data or not species_data["evolution_chain"]["url"]:
-        return None 
-    evo_chain_data = await _get_evo_chain_data(species_data["evolution_chain"]["url"])
-    if not evo_chain_data:
+    # espécie + chain
+    species = await pokeapi.get_pokemon_species_data(current_name)
+    if not species or not species.get("evolution_chain", {}).get("url"):
+        return None
+    chain_data = await _get_evo_chain_data(species["evolution_chain"]["url"])
+    if not chain_data:
         return None
 
-    # 3. Encontrar o "nó" atual
-    current_evo_node = _find_evolution_node(evo_chain_data["chain"], current_name)
-    if not current_evo_node:
+    node = _find_evolution_node(chain_data["chain"], current_name)
+    if not node:
         return None
 
-    # 4. Iterar possíveis evoluções
-    for potential_evo in current_evo_node.get("evolves_to", []):
-        new_species_name = potential_evo["species"]["name"]
-        for details in potential_evo.get("evolution_details", []):
+    for evo in node.get("evolves_to", []):
+        new_name = evo["species"]["name"]
+        for details in evo.get("evolution_details", []):
             trigger_data = details.get("trigger")
+            trigger_type = trigger_data.get("name") if isinstance(trigger_data, dict) else trigger_data
 
-            # trigger_data pode vir como dict {"name": "..."} ou como string "level-up"
-            trigger_type = None
-            if isinstance(trigger_data, dict):
-                trigger_type = trigger_data.get("name")
-            elif isinstance(trigger_data, str):
-                # Formato visto em alguns dumps: "level-up"
-                trigger_type = trigger_data
-
-            is_turn_upside_down = details.get("turn_upside_down", False)
-            evolution_allowed = False
-            
+            allowed = False
             if trigger_event == "level_up":
-                # Se o gatilho for level-up, SÓ checa evoluções de level-up
-                if trigger_type == "level-up":
-                    # Checa min_level, min_happiness, known_move, time_of_day etc.
-                    evolution_allowed = _check_level_up_conditions(details, context, pkmn)
-            
-            elif trigger_event == "item_use":
-                # Se o gatilho for item, checa tipos de evolução acionados por item
-                # 1. É uma evolução 'use-item' (Pedras)?
-                if trigger_type == "use-item":
-                    evolution_allowed = _check_item_use_conditions(details, context, pkmn, new_species_name)
-                # 2. É uma evolução 'trade' (Link Cable)?
-                elif trigger_type == "trade":
-                    evolution_allowed = _check_item_use_conditions(details, context, pkmn, new_species_name)
-                # 3. É a evolução 'turn_upside_down' (Inkay)?
-                elif is_turn_upside_down:
-                    evolution_allowed = _check_item_use_conditions(details, context, pkmn, new_species_name)
-                # 4. É uma das nossas 'level-up' customizadas (Sylveon, etc)?
-                elif trigger_type == "level-up":
-                    evolution_allowed = _check_item_use_conditions(details, context, pkmn, new_species_name)
+                if trigger_type == "level-up":  # hífen
+                    allowed = _check_level_up_conditions(details, context, pkmn)
 
-            # 7. Se a evolução for permitida, retorna os dados!
-            if evolution_allowed:
+            elif trigger_event == "item_use":
+                if trigger_type in ("use-item", "trade", "level-up") or details.get("turn_upside_down", False):
+                    allowed = _check_item_use_conditions(details, context, pkmn, new_name)
+
+            if allowed:
                 return {
                     "old_name": current_name,
-                    "new_name": new_species_name,
-                    "new_api_id": _get_species_id_from_url(potential_evo["species"]["url"])
+                    "new_name": new_name,
+                    "new_api_id": _get_species_id_from_url(evo["species"]["url"]),
                 }
-    
-    return None  # Nenhuma evolução encontrada
+
+    return None
