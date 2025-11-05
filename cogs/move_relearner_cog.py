@@ -69,12 +69,11 @@ class MoveReplaceView(ui.View):
             content=f"✅ **1, 2 e... pronto!** Seu Pokémon esqueceu o ataque antigo e aprendeu **{self.new_move.capitalize()}**!",
             view=None
         )
-        # O cog pai (MoveRelearnerCog) deve consumir a Heart Scale após isso
         self.stop()
 
     async def cancel_callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(
-            content=f"🤔 Decisão difícil! Você optou por não aprender **{self.new_move.capitalize()}** por enquanto.",
+            content=f"🤔 Decisão difícil! Você optou por não aprender **{self.new_move.capitalize()}** por enquanto. (A Heart Scale foi consumida pelo serviço.)",
             view=None
         )
         self.stop()
@@ -117,15 +116,29 @@ class MoveRelearnerSelectView(ui.View):
             return False
         return True
 
+    # --- LÓGICA DE CONSUMO MOVIDA PARA CÁ ---
     async def select_callback(self, interaction: discord.Interaction):
         """Chamado quando o jogador seleciona o ataque que quer reaprender."""
         new_move = interaction.data['values'][0]
         
         # Desativa o select
         for item in self.children: item.disabled = True
-        await interaction.response.edit_message(view=self)
+        await interaction.response.edit_message(content=f"Você escolheu **{new_move.capitalize()}**. Verificando e consumindo 1x Heart Scale...", view=self)
         
-        # Chama a lógica principal do cog
+        # --- ALTERADO: Tenta consumir o item AGORA ---
+        consumed = await self.cog.check_and_consume_heart_scale(self.author_id)
+        
+        if not consumed:
+            # Se a escama "sumiu" da bolsa (ex: vendida em outra sessão)
+            await interaction.edit_original_response(
+                content="❌ Ops! Parece que você não tem mais a Heart Scale na sua bolsa. Ação cancelada.",
+                view=None
+            )
+            self.stop()
+            return
+        # --- FIM DA ALTERAÇÃO ---
+
+        # Se o item foi consumido com sucesso, chama a lógica principal
         await self.cog.process_move_learning(interaction, self.pokemon, new_move)
         self.stop()
 
@@ -133,7 +146,8 @@ class MoveRelearnerSelectView(ui.View):
         if self.message:
             for item in self.children: item.disabled = True
             try:
-                await self.message.edit(content="A sessão do Move Relearner expirou.", view=self)
+                # --- ALTERADO: Mensagem de timeout (item não foi consumido) ---
+                await self.message.edit(content="A sessão do Move Relearner expirou. (Nenhum item foi gasto).", view=self)
             except discord.NotFound:
                 pass
 
@@ -180,7 +194,8 @@ class TeamSelectView(ui.View):
         if self.message:
             for item in self.children: item.disabled = True
             try:
-                await self.message.edit(content="A sessão do Move Relearner expirou.", view=self)
+                # --- ALTERADO: Mensagem de timeout (item não foi consumido) ---
+                await self.message.edit(content="A sessão do Move Relearner expirou. (Nenhum item foi gasto).", view=self)
             except discord.NotFound:
                 pass
 
@@ -206,6 +221,30 @@ class MoveRelearnerCog(commands.Cog):
         except Exception as e:
             print(f"Erro ao buscar ID da Heart Scale: {e}")
             return None
+
+    # --- NOVO: Função que APENAS CHECA, sem consumir ---
+    async def _check_has_heart_scale(self, player_id: int) -> bool:
+        """Verifica se o jogador tem uma Heart Scale, SEM a consumir."""
+        item_id = await self.get_heart_scale_id()
+        if not item_id:
+            print("Erro Crítico: ID da Heart Scale não encontrado no DB.")
+            return False
+            
+        try:
+            # 1. Verificar se tem o item
+            res = self.supabase.table('player_inventory') \
+                .select('quantity') \
+                .eq('player_id', player_id) \
+                .eq('item_id', item_id) \
+                .single().execute()
+            
+            if not res.data or res.data['quantity'] <= 0:
+                return False # Não tem o item
+            
+            return True # Tem o item!
+        except Exception as e:
+            print(f"Erro ao checar Heart Scale: {e}")
+            return False
 
     async def check_and_consume_heart_scale(self, player_id: int) -> bool:
         """Verifica se o jogador tem uma Heart Scale e a consome."""
@@ -283,14 +322,12 @@ class MoveRelearnerCog(commands.Cog):
     async def relearn(self, ctx: commands.Context):
         """Inicia o processo de reaprendizagem de movimentos."""
         
+        # --- ALTERADO: Apenas checa o item, NÃO consome ---
         # 1. Verifica se o jogador tem o item
-        has_item = await self.check_and_consume_heart_scale(ctx.author.id)
+        has_item = await self._check_has_heart_scale(ctx.author.id)
         if not has_item:
             await ctx.send(f"Você precisa de uma **Heart Scale** para usar este serviço. Você pode comprá-la na `!shop`.")
             return
-
-        # (Se chegou aqui, a Heart Scale JÁ FOI CONSUMIDA)
-        # Se o usuário cancelar, precisamos devolver
         
         # 2. Busca o time do jogador
         try:
@@ -302,27 +339,18 @@ class MoveRelearnerCog(commands.Cog):
             
             if not team_res.data:
                 await ctx.send("Você não tem Pokémon para ensinar.")
-                # Tenta devolver a Heart Scale
-                hs_id = await self.get_heart_scale_id()
-                if hs_id:
-                    shop_cog = self.bot.get_cog("ShopCog")
-                    if shop_cog:
-                         await shop_cog.add_item_to_inventory(ctx.author.id, hs_id, 1)
+                # --- ALTERADO: Não precisa devolver o item, pois não foi pego ---
                 return
 
             # 3. Mostra a View para escolher o Pokémon
             view = TeamSelectView(ctx.author.id, team_res.data, self)
-            msg = await ctx.send("Você entregou 1x Heart Scale. \nQual Pokémon deve reaprender um movimento?", view=view)
+            # --- ALTERADO: Mensagem não diz mais que o item foi entregue ---
+            msg = await ctx.send("Qual Pokémon deve reaprender um movimento? (Requer 1x Heart Scale)", view=view)
             view.message = msg
 
         except Exception as e:
             await ctx.send(f"Ocorreu um erro ao buscar seu time: {e}")
-            # Tenta devolver a Heart Scale
-            hs_id = await self.get_heart_scale_id()
-            if hs_id:
-                shop_cog = self.bot.get_cog("ShopCog")
-                if shop_cog:
-                        await shop_cog.add_item_to_inventory(ctx.author.id, hs_id, 1)
+            # --- ALTERADO: Não precisa devolver o item ---
 
 
     async def show_move_list(self, interaction: discord.Interaction, pokemon_db_id: str):
@@ -352,7 +380,10 @@ class MoveRelearnerCog(commands.Cog):
             await interaction.edit_original_response(content=f"Ocorreu um erro ao buscar os movimentos: {e}", view=None)
 
     async def process_move_learning(self, interaction: discord.Interaction, pokemon: dict, new_move: str):
-        """Etapa 3: O movimento foi escolhido, tenta aprendê-lo."""
+        """
+        Etapa 3: O movimento foi escolhido, tenta aprendê-lo.
+        (Esta função agora só é chamada APÓS o item ser consumido)
+        """
         
         current_moves = pokemon['moves']
         
@@ -360,6 +391,7 @@ class MoveRelearnerCog(commands.Cog):
         if None in current_moves:
             empty_slot_index = current_moves.index(None)
             await self._update_pokemon_moves(pokemon['id'], new_move, empty_slot_index)
+            # --- ALTERADO: Edita a resposta original da INTERAÇÃO ---
             await interaction.edit_original_response(
                 content=f"💡 **{pokemon['nickname']}** reaprendeu **{new_move.capitalize()}**!",
                 view=None
@@ -374,9 +406,10 @@ class MoveRelearnerCog(commands.Cog):
                 description=f"**{pokemon['nickname']}** quer aprender **{new_move.capitalize()}**, mas já conhece 4 ataques.\n\nEscolha um ataque para esquecer:",
                 color=discord.Color.orange()
             )
+            # --- ALTERADO: Edita a resposta original da INTERAÇÃO ---
             await interaction.edit_original_response(content=None, embed=embed, view=view)
-            # A lógica de consumo da Heart Scale já foi feita no início (!relearn)
-            # Se o usuário cancelar aqui, a escama foi gasta mesmo assim (como no jogo)
+            # A Heart Scale já foi consumida. Se o usuário cancelar aqui,
+            # o item foi gasto pelo serviço (como no jogo).
 
 
 async def setup(bot: commands.Bot):
