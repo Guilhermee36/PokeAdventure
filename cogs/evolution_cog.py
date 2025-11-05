@@ -126,18 +126,24 @@ class EvolutionCog(commands.Cog):
 
     async def _get_game_context(self, player_id: int, pokemon_to_exclude_id: str) -> dict:
         """
+        (CORRIGIDO)
         Busca dados complexos do jogo (tipos da party, localização, hora)
         para passar ao verificador de evolução.
         """
         party_types = set()
         location_name = None
-        time_of_day = "day" # TODO: Implementar um sistema de hora do jogo
+        # ✅ CORREÇÃO: Puxa o padrão do DB, mas será substituído
+        time_of_day = "day" 
         
         try:
-            # 1. Busca localização do jogador
-            player_res = self.supabase.table('players').select('current_location_name').eq('discord_id', player_id).single().execute()
+            # 1. Busca localização E HORA do jogador
+            # ✅ CORREÇÃO: Seleciona 'current_location_name' E 'game_time_of_day'
+            player_res = self.supabase.table('players').select('current_location_name, game_time_of_day').eq('discord_id', player_id).single().execute()
+            
             if player_res.data:
                 location_name = player_res.data.get('current_location_name')
+                # ✅ CORREÇÃO: Usa a hora do dia do DB
+                time_of_day = player_res.data.get('game_time_of_day', 'day')
 
             # 2. Busca o restante da party
             party_res = self.supabase.table('player_pokemon') \
@@ -163,7 +169,7 @@ class EvolutionCog(commands.Cog):
             print(f"Erro ao montar contexto de evolução: {e}")
             
         return {
-            "time_of_day": time_of_day,
+            "time_of_day": time_of_day, # ✅ Agora contém "day" ou "night" do DB
             "party_types": list(party_types),
             "current_location_name": location_name
         }
