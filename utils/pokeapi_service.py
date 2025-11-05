@@ -51,7 +51,7 @@ def find_evolution_details(chain: dict, current_pokemon_name: str) -> list | Non
             return result
     return None
 
-# ---------- cálculo de stats (alin. ao schema snake_case) ----------
+# ---------- cálculo de stats (alinhado ao schema snake_case) ----------
 def calculate_stats_for_level(base_stats: list, level: int) -> dict:
     """
     hp -> max_hp
@@ -100,17 +100,43 @@ def get_initial_moves(pokemon_api_data: dict, starting_level: int) -> list:
                 if 0 < lvl <= starting_level:
                     candidates.append((lvl, move_name))
                     break
-
     candidates.sort(key=lambda x: (x[0], x[1]))  # por nível, depois nome
     initial_moves = [name for _, name in candidates[-4:]]
     while len(initial_moves) < 4:
         initial_moves.append(None)
     return initial_moves
 
-# ---------- extras opcionais ----------
+# ---------- helpers de flavor text / sprites ----------
 def _clean_flavor_text(text: str) -> str:
-    text = text.replace('\n', ' ').replace('\f', ' ').strip()
-    return re.sub(r'\s+', ' ', text)
+    """Limpa o texto da Pokédex removendo quebras de linha e caracteres de controle."""
+    if not text:
+        return "Nenhuma descrição encontrada."
+    text = text.replace('\n', ' ').replace('\f', ' ')
+    text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+    return re.sub(r'\s+', ' ', text).strip()
+
+def get_portuguese_flavor_text(species_data: dict) -> str:
+    """
+    ***Função esperada pelo TeamCog***:
+    recebe o dict de `pokemon-species` e devolve um flavor text em pt-BR (fallback: en).
+    """
+    if not species_data or 'flavor_text_entries' not in species_data:
+        return "Descrição não disponível."
+    for entry in species_data['flavor_text_entries']:
+        if entry.get('language', {}).get('name') == 'pt':
+            return _clean_flavor_text(entry.get('flavor_text', ''))
+    for entry in species_data['flavor_text_entries']:  # fallback inglês
+        if entry.get('language', {}).get('name') == 'en':
+            return _clean_flavor_text(entry.get('flavor_text', ''))
+    return "Descrição não disponível."
+# (essa assinatura bate com o uso no TeamCog) :contentReference[oaicite:3]{index=3}
+
+async def get_species_flavor_text_pt(pokemon_name_or_id: str) -> str:
+    """
+    Wrapper opcional: aceita um nome/id, busca `pokemon-species` e retorna o texto em pt/en.
+    """
+    data = await get_pokemon_species_data(pokemon_name_or_id)
+    return get_portuguese_flavor_text(data)
 
 async def get_pokemon_sprite_urls(pokemon_name: str) -> dict:
     data = await get_pokemon_data(pokemon_name)
@@ -122,13 +148,13 @@ async def get_pokemon_sprite_urls(pokemon_name: str) -> dict:
         "official_artwork": sprites.get("other", {}).get("official-artwork", {}).get("front_default"),
     }
 
-async def get_species_flavor_text_en(pokemon_name: str) -> str:
-    data = await get_pokemon_species_data(pokemon_name)
+async def get_species_flavor_text_en(pokemon_name_or_id: str) -> str:
+    data = await get_pokemon_species_data(pokemon_name_or_id)
     if not data:
         return "Description unavailable."
     for entry in data.get('flavor_text_entries', []):
-        if entry['language']['name'] == 'en':
-            return _clean_flavor_text(entry['flavor_text'])
+        if entry.get('language', {}).get('name') == 'en':
+            return _clean_flavor_text(entry.get('flavor_text', ''))
     return "Descrição não disponível."
 
 async def download_image_bytes(url: str) -> bytes | None:
@@ -140,4 +166,3 @@ async def download_image_bytes(url: str) -> bytes | None:
     except Exception as e:
         print(f"Erro ao baixar imagem: {e}")
     return None
-
