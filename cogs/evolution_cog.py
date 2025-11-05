@@ -12,7 +12,7 @@ import utils.pokeapi_service as pokeapi
 import utils.evolution_utils as evolution_utils
 
 # --- CLASSES DE UI (MoveReplaceView) ---
-# (O código MoveReplaceView permanece o mesmo...)
+# (...código da MoveReplaceView permanece o mesmo...)
 class MoveReplaceView(ui.View):
     """View para o jogador substituir um ataque quando a lista de 4 ataques está cheia."""
     def __init__(self, pokemon_id: str, new_move: str, current_moves: list, cog):
@@ -59,8 +59,7 @@ class EvolutionCog(commands.Cog):
         print("EvolutionCog carregado e conectado ao Supabase.")
 
     # --- FUNÇÕES DE LÓGICA INTERNA ---
-    # (..._update_pokemon_moves, check_for_new_moves, _get_game_context, check_for_level_up, evolve_pokemon... 
-    # todas essas funções permanecem exatamente iguais ao seu arquivo original)
+    # (..._update_pokemon_moves, check_for_new_moves... permanecem iguais)
 
     async def _update_pokemon_moves(self, pokemon_id: str, new_move: str, slot: int):
         """Função auxiliar para atualizar a lista de ataques de um Pokémon no DB."""
@@ -77,6 +76,9 @@ class EvolutionCog(commands.Cog):
 
     async def check_for_new_moves(self, pokemon: dict, new_level: int, channel):
         """Verifica e processa TODOS os novos ataques que um Pokémon aprende em um nível."""
+        # ✅ NOTA: 'pokemon' dict aqui pode ter o NOME ANTIGO (ex: Piloswine)
+        # ou o NOME NOVO (ex: Mamoswine) dependendo se evoluiu ou não.
+        # A API é chamada com o nome que estiver no dict.
         pokemon_api_data = await pokeapi.get_pokemon_data(pokemon['pokemon_api_name'])
         if not pokemon_api_data: return
 
@@ -96,6 +98,7 @@ class EvolutionCog(commands.Cog):
 
         for move_name in newly_learned_moves:
             try:
+                # Re-busca os moves do DB para garantir que estamos atualizados
                 response = self.supabase.table('player_pokemon').select('moves').eq('id', pokemon['id']).single().execute()
                 if not response.data: continue
                 current_moves = response.data['moves']
@@ -118,12 +121,15 @@ class EvolutionCog(commands.Cog):
                 )
                 view = MoveReplaceView(pokemon['id'], move_name, current_moves, self)
                 msg = await channel.send(embed=embed, view=view)
-                await view.wait()
+                await view.wait() # Esta pausa (wait) é o motivo da troca de ordem
                 try:
                     await msg.edit(view=None) # Limpa os botões após a interação
                 except discord.NotFound:
                     pass 
 
+    # =================================================================
+    # <<< ✅ FUNÇÃO _get_game_context CORRIGIDA ✅ >>>
+    # =================================================================
     async def _get_game_context(self, player_id: int, pokemon_to_exclude_id: str) -> dict:
         """
         (CORRIGIDO)
@@ -138,6 +144,7 @@ class EvolutionCog(commands.Cog):
         try:
             # 1. Busca localização E HORA do jogador
             # ✅ CORREÇÃO: Seleciona 'current_location_name' E 'game_time_of_day'
+            # Isso lê a coluna 'game_time_of_day' da tabela 'players'
             player_res = self.supabase.table('players').select('current_location_name, game_time_of_day').eq('discord_id', player_id).single().execute()
             
             if player_res.data:
@@ -175,6 +182,9 @@ class EvolutionCog(commands.Cog):
         }
 
 
+    # =================================================================
+    # <<< ✅ FUNÇÃO check_for_level_up CORRIGIDA (ORDEM TROCADA) ✅ >>>
+    # =================================================================
     async def check_for_level_up(self, pokemon: dict, channel):
         """Verifica se um Pokémon tem XP suficiente para subir de nível e atualiza stats."""
         species_data = await pokeapi.get_pokemon_species_data(pokemon['pokemon_api_name'])
@@ -212,9 +222,9 @@ class EvolutionCog(commands.Cog):
                 pokemon['current_level'] = new_level
                 pokemon.update(recalculated_stats)
                 
-                await self.check_for_new_moves(pokemon, new_level, channel)
-                
-                # LÓGICA DE EVOLUÇÃO REFATORADA
+                # ====================================================
+                # <<< ✅ LÓGICA DE EVOLUÇÃO (MOVIDA PARA CIMA) ✅ >>>
+                # ====================================================
                 game_context = await self._get_game_context(pokemon['player_id'], pokemon['id'])
                 
                 evo_result = await evolution_utils.check_evolution(
@@ -224,11 +234,29 @@ class EvolutionCog(commands.Cog):
                     context=game_context
                 )
                 
+                did_evolve = False
                 if evo_result:
+                    # evolve_pokemon atualiza o DB, mas não o dict 'pokemon' local
                     await self.evolve_pokemon(pokemon['player_id'], pokemon['id'], evo_result['new_name'], channel)
-                    break 
-                # FIM DA REFATORAÇÃO
+                    
+                    # Precisamos atualizar o dict local para o check_for_new_moves
+                    pokemon['pokemon_api_name'] = evo_result['new_name']
+                    did_evolve = True
+                
+                # ====================================================
+                # <<< ✅ CHECAGEM DE MOVIMENTOS (MOVIDA PARA BAIXO) ✅ >>>
+                # ====================================================
+                # Agora, a checagem de movimentos roda DEPOIS da evolução.
+                # Se evoluiu, 'pokemon' tem o novo nome (ex: Mamoswine)
+                # e vai checar os movimentos de Mamoswine para este 'new_level'.
+                await self.check_for_new_moves(pokemon, new_level, channel)
 
+                # Se evoluiu, para o loop de level-up
+                if did_evolve:
+                    break 
+                # ====================================================
+
+                # Se não evoluiu, pega a XP para o próximo loop
                 xp_needed = await pokeapi.get_total_xp_for_level(growth_rate_url, new_level + 1)
                 if xp_needed == float('inf'):
                     break 
@@ -237,6 +265,8 @@ class EvolutionCog(commands.Cog):
                 print(f"Erro ao atualizar nível e stats no DB: {e}")
                 break
 
+    # ... (O restante do arquivo: evolve_pokemon, give_xp, give_happiness, setup) ...
+    # (permanece o mesmo)
     async def evolve_pokemon(self, discord_id: int, pokemon_db_id: str, new_pokemon_api_name: str, channel):
         """
         Atualiza os dados de um Pokémon no DB após evoluir.
@@ -320,9 +350,6 @@ class EvolutionCog(commands.Cog):
             await ctx.send(f"Ocorreu um erro inesperado ao dar XP.")
             print(f"Erro no comando !givexp: {e}")
 
-    # =================================================================
-    # <<< NOVO COMANDO !givehappiness >>>
-    # =================================================================
     @commands.command(name='givehappiness', help='(Admin) Dá felicidade para um dos seus Pokémon.')
     @commands.is_owner()
     async def give_happiness(self, ctx: commands.Context, amount: int, *, pokemon_nickname: str):
@@ -344,26 +371,17 @@ class EvolutionCog(commands.Cog):
             
             pokemon = response.data[0]
             
-            # O padrão do DB é 70, então podemos usar .get com segurança
             current_happiness = pokemon.get('happiness', 70)
             new_happiness = current_happiness + amount
-            
-            # Cap de felicidade (0 a 255 é o padrão nos jogos)
             new_happiness = max(0, min(255, new_happiness)) 
             
             self.supabase.table('player_pokemon').update({'happiness': new_happiness}).eq('id', pokemon['id']).execute()
             
             await ctx.send(f"Você alterou a felicidade de **{pokemon['nickname']}** em {amount}. Felicidade Total agora: **{new_happiness}/255**.")
             
-            # Nota: Dar felicidade por si só não evolui. A evolução por felicidade
-            # é checada durante o 'level_up' (que é chamado pelo !givexp).
-            
         except Exception as e:
             await ctx.send(f"Ocorreu um erro inesperado ao dar felicidade.")
             print(f"Erro no comando !givehappiness: {e}")
-    # =================================================================
-    # <<< FIM DO NOVO COMANDO >>>
-    # =================================================================
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(EvolutionCog(bot))
