@@ -1,14 +1,14 @@
 # cogs/adventure_cog.py
 
 import discord
-import os
+import os # <--- IMPORTADO PARA VERIFICAR O CAMINHO DO ARQUIVO
 from discord.ext import commands
 from discord import ui
 from supabase import create_client, Client
 import utils.event_utils as event_utils
 
 # --- Classes de UI (Botões) ---
-# (AdventureView permanece a mesma do Design 3.0)
+# (AdventureView permanece a mesma do Design 3.0/4.0)
 class AdventureView(ui.View):
     def __init__(self, possible_events: list[str], cog_instance):
         super().__init__(timeout=300)
@@ -58,6 +58,7 @@ class AdventureCog(commands.Cog):
         print("AdventureCog carregado.")
 
     # --- Funções de Busca de Dados ---
+    # (_get_player_data e _get_location_data não mudam)
 
     async def _get_player_data(self, player_id: int):
         """Busca dados do jogador."""
@@ -65,7 +66,7 @@ class AdventureCog(commands.Cog):
         return res.data if res.data else None
 
     async def _get_location_data(self, location_name: str):
-        """Busca dados da localização (incluindo a nova coluna 'image_url')."""
+        """Busca dados da localização."""
         res = self.supabase.table("locations").select("*").eq("location_api_name", location_name).single().execute()
         return res.data if res.data else None
 
@@ -76,7 +77,6 @@ class AdventureCog(commands.Cog):
         (SIMULADO - APENAS DESIGN)
         Define qual é a missão da localização atual.
         """
-        # (Lógica permanece a mesma)
         if location['location_api_name'] == 'route-1':
             return ("Progresso da Rota", "Derrote 10 Pokémon selvagens. (0/10)")
         if location['type'] == 'city':
@@ -85,7 +85,7 @@ class AdventureCog(commands.Cog):
             return ("Exploração", "Fale com os habitantes locais.")
         return ("Exploração", "Explore a área.")
 
-    # --- Construtor de Embed (FINAL) ---
+    # --- Construtor de Embed (Design 5.0) ---
 
     async def _build_adventure_embed(
         self, 
@@ -94,44 +94,29 @@ class AdventureCog(commands.Cog):
         mission: tuple[str, str]
     ) -> discord.Embed:
         """
-        (Design 4.0 - FINAL)
-        Constrói o embed principal lendo a 'image_url' do DB.
+        (Design 5.0)
+        Constrói o embed para usar uma imagem de anexo local.
         """
         
         location_name_pt = location.get('name_pt', player['current_location_name'].capitalize())
         
-        # Adiciona a descrição (como no seu último print)
         embed = discord.Embed(
             title=f"📍 Local: {location_name_pt}",
             description=f"O que você gostaria de fazer, {player['trainer_name']}?",
             color=discord.Color.dark_green()
         )
         
-        # 1. Campo da Missão
         mission_title, mission_desc = mission
         embed.add_field(name=f"🎯 {mission_title}", value=mission_desc, inline=False)
 
-        # 2. Campo da Imagem (Lendo do DB)
-        # Busca a URL da nova coluna 'image_url' que vem do _get_location_data
-        image_url = location.get("image_url") 
-        
-        if image_url:
-            embed.set_image(url=image_url) # <-- O embed ficará GRANDE
-        else:
-            # Fallback (PEQUENO) se a URL for nula no DB
-            placeholder_box = (
-                "```\n"
-                "\n"
-                "     [Sem imagem para este local]\n"
-                "\n"
-                "```"
-            )
-            embed.add_field(name=" ", value=placeholder_box, inline=False)
+        # A imagem será anexada ao enviar a mensagem.
+        # Referenciamos o anexo aqui. O nome 'region_map.png' é fixo.
+        embed.set_image(url="attachment://region_map.png")
 
         embed.set_footer(text=f"Explorando como {player['trainer_name']}.")
         return embed
 
-    # --- Comando Principal ---
+    # --- Comando Principal (MODIFICADO) ---
 
     @commands.command(name='adventure', aliases=['adv', 'a'])
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -165,11 +150,29 @@ class AdventureCog(commands.Cog):
             embed.color = discord.Color.red()
             embed.description = "Seu time está exausto! Você corre para o Centro Pokémon."
 
-        msg = await ctx.send(embed=embed, view=view)
+        # --- LÓGICA DE ANEXO DE IMAGEM LOCAL ---
+        
+        # 1. Pega a região do jogador (salva no !start)
+        player_region = player.get('current_region', 'Kanto') # Usa Kanto como fallback
+        
+        # 2. Constrói o caminho do arquivo
+        filepath = f"assets/ImgEmbedRegions/{player_region}.png"
+        
+        discord_file = None
+        if os.path.exists(filepath):
+            # 3. Cria o arquivo do Discord
+            discord_file = discord.File(filepath, filename="region_map.png")
+        else:
+            print(f"AVISO: Imagem do mapa não encontrada em {filepath}")
+            # Se o arquivo não existe, o embed será enviado sem imagem (pequeno)
+            embed.set_image(url=None) # Remove a referência à imagem
+            
+        # 4. Envia a mensagem (com ou sem o 'file=')
+        msg = await ctx.send(embed=embed, view=view, file=discord_file)
         view.message = msg 
 
     # --- O restante do arquivo (handlers de erro, actions, TravelView, setup) ---
-    # (Permanece o mesmo do Design 3.0)
+    # (Permanece o mesmo do Design 4.0)
 
     @adventure.error
     async def adventure_error(self, ctx: commands.Context, error):
