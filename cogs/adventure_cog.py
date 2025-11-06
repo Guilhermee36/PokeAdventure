@@ -87,7 +87,7 @@ class AdventureCog(commands.Cog):
             return ("Exploração", "Fale com os habitantes locais.")
         return ("Exploração", "Explore a área.")
 
-    # --- Construtor de Embed (MODIFICADO COM ESPAÇAMENTO) ---
+    # --- Construtor de Embed (REVERTIDO PARA O DESIGN 5.4) ---
 
     async def _build_adventure_embed(
         self, 
@@ -96,8 +96,8 @@ class AdventureCog(commands.Cog):
         mission: tuple[str, str]
     ) -> discord.Embed:
         """
-        (Design 6.0)
-        Constrói o embed com espaçamento extra (campos em branco).
+        (Design 5.4 - O 'tamanho bom')
+        Constrói o embed sem espaçamento vertical extra.
         """
         
         location_name_pt = location.get('name_pt', player['current_location_name'].capitalize())
@@ -108,16 +108,10 @@ class AdventureCog(commands.Cog):
             color=discord.Color.dark_green()
         )
         
-        # --- NOVO: Campo de espaçamento ---
-        # \u200b é um caractere invisível (zero-width space)
-        embed.add_field(name="\u200b", value="\u200b", inline=False) 
-
         mission_title, mission_desc = mission
         embed.add_field(name=f"🎯 {mission_title}", value=mission_desc, inline=False)
 
-        # --- NOVO: Mais um campo de espaçamento ---
-        # (Isso empurra a imagem para baixo, longe do texto da missão)
-        embed.add_field(name="\u200b", value="\u200b", inline=False) 
+        # Removemos os campos \u200b (invisíveis) daqui.
 
         embed.set_image(url="attachment://region_map.png")
         embed.set_footer(text=f"Explorando como {player['trainer_name']}.")
