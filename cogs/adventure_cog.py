@@ -8,57 +8,37 @@ from supabase import create_client, Client
 import utils.event_utils as event_utils
 
 # --- Classes de UI (Botões) ---
-
+# (AdventureView permanece a mesma)
 class AdventureView(ui.View):
-    """
-    (Design 5.1)
-    Gera botões dinâmicos baseados nos eventos possíveis.
-    """
-    
     def __init__(self, possible_events: list[str], cog_instance):
         super().__init__(timeout=300)
-        self.cog = cog_instance # Referência ao AdventureCog
+        self.cog = cog_instance
         self.player = None 
         self.location = None 
-
-        # Mapeamento de eventos para botões
         event_map = {
-            # Eventos de Rota
             "wild_encounter": ui.Button(label="Procurar Pokémon", emoji="🌿", custom_id="adv:wild", style=discord.ButtonStyle.primary, row=0),
             "move_to_location": ui.Button(label="Mudar de Rota", emoji="🗺️", custom_id="adv:travel", style=discord.ButtonStyle.secondary, row=1),
             "find_item": ui.Button(label="Investigar Área", emoji="🎒", custom_id="adv:find_item", style=discord.ButtonStyle.secondary, row=1),
-            
-            # Eventos de Cidade
             "pokemon_center": ui.Button(label="Centro Pokémon", emoji="🏥", custom_id="adv:heal", style=discord.ButtonStyle.primary, row=0),
             "shop": ui.Button(label="Loja", emoji="🛒", custom_id="adv:shop", style=discord.ButtonStyle.secondary, row=1),
             "challenge_gym": ui.Button(label="Desafiar Ginásio", emoji="🏅", custom_id="adv:gym", style=discord.ButtonStyle.danger, row=0),
             "talk_npc": ui.Button(label="Falar (NPC)", emoji="💬", custom_id="adv:talk", style=discord.ButtonStyle.secondary, row=1),
             "move_to_route": ui.Button(label="Mudar de Rota", emoji="🗺️", custom_id="adv:travel", style=discord.ButtonStyle.secondary, row=1),
         }
-
-        # Adiciona apenas os botões para os eventos possíveis
         for event_name in possible_events:
             if event_name in event_map:
                 button = event_map[event_name]
                 button.callback = self.on_button_click
                 self.add_item(button)
-
     async def on_button_click(self, interaction: discord.Interaction):
-        """Callback genérico para todos os botões."""
         custom_id = interaction.data['custom_id']
-        
         if interaction.user.id != self.player['discord_id']:
             await interaction.response.send_message("Estes não são seus botões!", ephemeral=True)
             return
-
         action = custom_id.split(':')[-1]
-        
-        # Ação 'shop' é um atalho e não desativa a view
         if action == "shop":
             await self.cog.handle_adventure_action(interaction, self.player, self.location, action, respond_now=True)
             return
-
-        # Ações que "gastam" o turno (desativam a view)
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(view=self)
@@ -76,8 +56,16 @@ class AdventureCog(commands.Cog):
         key: str = os.environ.get("SUPABASE_KEY")
         self.supabase: Client = create_client(url, key)
         print("AdventureCog carregado.")
+        
+        # --- NOVO: Define o caminho base do projeto ---
+        # __file__ é o caminho deste arquivo (cogs/adventure_cog.py)
+        # os.path.dirname(__file__) é a pasta 'cogs'
+        # os.path.dirname(os.path.dirname(__file__)) é a 'raiz' (PokeAdventure/)
+        self.base_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
     # --- Funções de Busca de Dados ---
+    # (_get_player_data e _get_location_data não mudam)
 
     async def _get_player_data(self, player_id: int):
         """Busca dados do jogador."""
@@ -90,12 +78,10 @@ class AdventureCog(commands.Cog):
         return res.data if res.data else None
 
     # --- Funções de Lógica de Design (Simuladas) ---
+    # (_get_location_mission não muda)
 
     def _get_location_mission(self, location: dict, player: dict) -> tuple[str, str]:
-        """
-        (SIMULADO - APENAS DESIGN)
-        Define qual é a missão da localização atual.
-        """
+        """(SIMULADO) Define a missão da localização atual."""
         if location['location_api_name'] == 'route-1':
             return ("Progresso da Rota", "Derrote 10 Pokémon selvagens. (0/10)")
         if location['type'] == 'city':
@@ -104,7 +90,8 @@ class AdventureCog(commands.Cog):
             return ("Exploração", "Fale com os habitantes locais.")
         return ("Exploração", "Explore a área.")
 
-    # --- Construtor de Embed (Design 5.1) ---
+    # --- Construtor de Embed ---
+    # (_build_adventure_embed não muda)
 
     async def _build_adventure_embed(
         self, 
@@ -112,10 +99,7 @@ class AdventureCog(commands.Cog):
         location: dict, 
         mission: tuple[str, str]
     ) -> discord.Embed:
-        """
-        (Design 5.1)
-        Constrói o embed para usar uma imagem de anexo local.
-        """
+        """(Design 5.2) Constrói o embed para usar uma imagem de anexo local."""
         
         location_name_pt = location.get('name_pt', player['current_location_name'].capitalize())
         
@@ -129,13 +113,11 @@ class AdventureCog(commands.Cog):
         embed.add_field(name=f"🎯 {mission_title}", value=mission_desc, inline=False)
 
         # A imagem será anexada ao enviar a mensagem.
-        # Referenciamos o anexo aqui. O nome 'region_map.png' é fixo.
         embed.set_image(url="attachment://region_map.png")
-
         embed.set_footer(text=f"Explorando como {player['trainer_name']}.")
         return embed
 
-    # --- Comando Principal (MODIFICADO COM TRATAMENTO DE ERROS) ---
+    # --- Comando Principal (MODIFICADO COM CAMINHO ABSOLUTO) ---
 
     @commands.command(name='adventure', aliases=['adv', 'a'])
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -163,54 +145,47 @@ class AdventureCog(commands.Cog):
         view.player = player
         view.location = location
         
-        # O embed é construído primeiro, assumindo que a imagem vai funcionar
         embed = await self._build_adventure_embed(player, location, mission_data)
         
         if 'pokemon_center' in possible_events and len(possible_events) == 1:
             embed.color = discord.Color.red()
             embed.description = "Seu time está exausto! Você corre para o Centro Pokémon."
 
-        # --- LÓGICA DE ANEXO DE IMAGEM (COM TRATAMENTO DE ERRO) ---
+        # --- LÓGICA DE ANEXO DE IMAGEM (COM CAMINHO ABSOLUTO) ---
         
         discord_file = None
-        filepath = "" # Inicializa a variável
+        filepath = ""
         
         try:
-            player_region = player.get('current_region', 'Kanto') # Usa Kanto como fallback [cite: 10]
-            
-            # Garante que o nome do arquivo esteja capitalizado (Kanto.png, não kanto.png)
+            player_region = player.get('current_region', 'Kanto')
             region_filename = f"{player_region.capitalize()}.png" 
-            filepath = f"assets/ImgEmbedRegions/{region_filename}"
+            
+            # --- CORREÇÃO: Usa o caminho base absoluto ---
+            filepath = os.path.join(self.base_project_dir, "assets", "ImgEmbedRegions", region_filename)
             
             if os.path.exists(filepath):
-                # Se o arquivo existir, cria o File
-                discord_file = discord.File(filepath, filename="region_map.png")
-                # (A URL "attachment://region_map.png" já foi definida no _build_adventure_embed)
+                # Abre o arquivo em modo binário (rb)
+                with open(filepath, 'rb') as f:
+                    discord_file = discord.File(f, filename="region_map.png")
             else:
-                # Se o arquivo NÃO existe, remove a referência da imagem
                 embed.set_image(url=None)
                 print(f"AVISO: Imagem do mapa não encontrada em {filepath}")
-                
-                # Envia um aviso (apenas para o admin, para não poluir o chat)
                 if await self.bot.is_owner(ctx.author):
                     await ctx.send(f"**Debug (Admin):** Mapa não encontrado. Verifiquei: `{filepath}`", delete_after=10)
 
-            # Envia a mensagem (com ou sem o 'file=')
             msg = await ctx.send(embed=embed, view=view, file=discord_file)
             view.message = msg
 
         except discord.HTTPException as e:
-            # Erro se o Discord rejeitar o arquivo (ex: muito grande)
             print(f"ERRO DE DISCORD (HTTPException): {e}")
-            embed.set_image(url=None) # Garante que a imagem seja removida
+            embed.set_image(url=None)
             msg = await ctx.send(embed=embed, view=view) # Reenvia sem o arquivo
             view.message = msg
             await ctx.send(f"Houve um erro ao tentar carregar a imagem do mapa (HTTPException): {e}", ephemeral=True)
             
         except Exception as e:
-            # Erro geral (ex: permissões de arquivo no sistema)
-            print(f"ERRO GERAL no anexo de imagem: {e}")
-            embed.set_image(url=None) # Garante que a imagem seja removida
+            print(f"ERRO GERAL no anexo de imagem (Caminho: {filepath}): {e}")
+            embed.set_image(url=None)
             msg = await ctx.send(embed=embed, view=view) # Reenvia sem o arquivo
             view.message = msg
             await ctx.send(f"Houve um erro inesperado ao carregar a imagem: {e}", ephemeral=True)
@@ -273,7 +248,6 @@ class AdventureCog(commands.Cog):
                 await sender("Você não tem Pokémon no seu time para curar.")
                 return
 
-            # Atualiza o HP de cada Pokémon
             for p in party_res.data:
                 self.supabase.table("player_pokemon") \
                     .update({"current_hp": p['max_hp']}) \
@@ -320,7 +294,6 @@ class AdventureCog(commands.Cog):
                 .eq("discord_id", player['discord_id']) \
                 .execute()
             
-            # Busca o nome PT da nova localização
             loc_data = await self._get_location_data(new_location_api_name)
             new_loc_name_pt = loc_data['name_pt'] if loc_data else new_location_api_name.capitalize()
 
@@ -331,7 +304,7 @@ class AdventureCog(commands.Cog):
 
 
 # --- View Específica de Viagem ---
-
+# (TravelView permanece a mesma)
 class TravelView(ui.View):
     def __init__(self, routes_data: list, cog_instance):
         super().__init__(timeout=180)
@@ -340,7 +313,6 @@ class TravelView(ui.View):
         
         for route in routes_data:
             location_api_name = route['location_to']
-            # 'locations' é o nome da tabela juntada (foreign key)
             location_pt_name = route['locations']['name_pt'] 
             
             button = ui.Button(label=location_pt_name, custom_id=f"travel:{location_api_name}")
@@ -348,20 +320,14 @@ class TravelView(ui.View):
             self.add_item(button)
 
     async def on_travel_click(self, interaction: discord.Interaction):
-        # Verifica se o jogador pode interagir
         if interaction.user.id != self.player['discord_id']:
             await interaction.response.send_message("Estes não são seus botões!", ephemeral=True)
             return
-
         for item in self.children:
             item.disabled = True
-        
         custom_id = interaction.data['custom_id']
         new_location = custom_id.split(':')[-1]
-        
         await interaction.response.edit_message(content=f"Viajando para {new_location}...", view=None)
-        
-        # Delega a ação final
         await self.cog.action_move_to(interaction, self.player, new_location)
 
 
