@@ -157,12 +157,3 @@ async def get_species_flavor_text_en(pokemon_name_or_id: str) -> str:
             return _clean_flavor_text(entry.get('flavor_text', ''))
     return "Descrição não disponível."
 
-async def download_image_bytes(url: str) -> bytes | None:
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    return await resp.read()
-    except Exception as e:
-        print(f"Erro ao baixar imagem: {e}")
-    return None
