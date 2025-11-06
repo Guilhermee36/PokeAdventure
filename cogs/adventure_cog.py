@@ -56,12 +56,7 @@ class AdventureCog(commands.Cog):
         key: str = os.environ.get("SUPABASE_KEY")
         self.supabase: Client = create_client(url, key)
         print("AdventureCog carregado.")
-        
-        # --- NOVO: Define o caminho base do projeto ---
-        # __file__ é o caminho deste arquivo (cogs/adventure_cog.py)
-        # os.path.dirname(__file__) é a pasta 'cogs'
-        # os.path.dirname(os.path.dirname(__file__)) é a 'raiz' (PokeAdventure/)
-        self.base_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # self.base_project_dir NÃO é mais necessário.
 
 
     # --- Funções de Busca de Dados ---
@@ -99,7 +94,7 @@ class AdventureCog(commands.Cog):
         location: dict, 
         mission: tuple[str, str]
     ) -> discord.Embed:
-        """(Design 5.2) Constrói o embed para usar uma imagem de anexo local."""
+        """(Design 5.3) Constrói o embed para usar uma imagem de anexo local."""
         
         location_name_pt = location.get('name_pt', player['current_location_name'].capitalize())
         
@@ -117,7 +112,7 @@ class AdventureCog(commands.Cog):
         embed.set_footer(text=f"Explorando como {player['trainer_name']}.")
         return embed
 
-    # --- Comando Principal (MODIFICADO COM CAMINHO ABSOLUTO) ---
+    # --- Comando Principal (MODIFICADO COM CAMINHO SIMPLES) ---
 
     @commands.command(name='adventure', aliases=['adv', 'a'])
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -151,20 +146,20 @@ class AdventureCog(commands.Cog):
             embed.color = discord.Color.red()
             embed.description = "Seu time está exausto! Você corre para o Centro Pokémon."
 
-        # --- LÓGICA DE ANEXO DE IMAGEM (COM CAMINHO ABSOLUTO) ---
+        # --- LÓGICA DE ANEXO DE IMAGEM (CAMINHO SIMPLES E NOVO NOME DE PASTA) ---
         
         discord_file = None
         filepath = ""
         
         try:
-            player_region = player.get('current_region', 'Kanto')
+            # Pega a região da tabela 'players', coluna 'current_region'
+            player_region = player.get('current_region', 'Kanto') 
             region_filename = f"{player_region.capitalize()}.png" 
             
-            # --- CORREÇÃO: Usa o caminho base absoluto ---
-            filepath = os.path.join(self.base_project_dir, "assets", "ImgEmbedRegions", region_filename)
+            # --- CORREÇÃO: Caminho relativo simples e nome da pasta "Regions" ---
+            filepath = os.path.join("assets", "Regions", region_filename)
             
             if os.path.exists(filepath):
-                # Abre o arquivo em modo binário (rb)
                 with open(filepath, 'rb') as f:
                     discord_file = discord.File(f, filename="region_map.png")
             else:
@@ -179,14 +174,14 @@ class AdventureCog(commands.Cog):
         except discord.HTTPException as e:
             print(f"ERRO DE DISCORD (HTTPException): {e}")
             embed.set_image(url=None)
-            msg = await ctx.send(embed=embed, view=view) # Reenvia sem o arquivo
+            msg = await ctx.send(embed=embed, view=view)
             view.message = msg
             await ctx.send(f"Houve um erro ao tentar carregar a imagem do mapa (HTTPException): {e}", ephemeral=True)
             
         except Exception as e:
             print(f"ERRO GERAL no anexo de imagem (Caminho: {filepath}): {e}")
             embed.set_image(url=None)
-            msg = await ctx.send(embed=embed, view=view) # Reenvia sem o arquivo
+            msg = await ctx.send(embed=embed, view=view)
             view.message = msg
             await ctx.send(f"Houve um erro inesperado ao carregar a imagem: {e}", ephemeral=True)
 
