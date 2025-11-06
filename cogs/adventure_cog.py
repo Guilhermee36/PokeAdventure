@@ -56,7 +56,13 @@ class AdventureCog(commands.Cog):
         key: str = os.environ.get("SUPABASE_KEY")
         self.supabase: Client = create_client(url, key)
         print("AdventureCog carregado.")
-        # self.base_project_dir NÃO é mais necessário.
+        
+        # --- SOLUÇÃO ROBUSTA ---
+        # Encontra o caminho absoluto para a pasta raiz do projeto
+        # __file__ = cogs/adventure_cog.py
+        # os.path.dirname(__file__) = cogs/
+        # os.path.dirname(os.path.dirname(__file__)) = Raiz (onde está o MainBot.py)
+        self.base_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
     # --- Funções de Busca de Dados ---
@@ -94,7 +100,7 @@ class AdventureCog(commands.Cog):
         location: dict, 
         mission: tuple[str, str]
     ) -> discord.Embed:
-        """(Design 5.3) Constrói o embed para usar uma imagem de anexo local."""
+        """(Design 5.4) Constrói o embed para usar uma imagem de anexo local."""
         
         location_name_pt = location.get('name_pt', player['current_location_name'].capitalize())
         
@@ -107,12 +113,11 @@ class AdventureCog(commands.Cog):
         mission_title, mission_desc = mission
         embed.add_field(name=f"🎯 {mission_title}", value=mission_desc, inline=False)
 
-        # A imagem será anexada ao enviar a mensagem.
         embed.set_image(url="attachment://region_map.png")
         embed.set_footer(text=f"Explorando como {player['trainer_name']}.")
         return embed
 
-    # --- Comando Principal (MODIFICADO COM CAMINHO SIMPLES) ---
+    # --- Comando Principal (MODIFICADO COM CAMINHO ABSOLUTO) ---
 
     @commands.command(name='adventure', aliases=['adv', 'a'])
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -146,20 +151,20 @@ class AdventureCog(commands.Cog):
             embed.color = discord.Color.red()
             embed.description = "Seu time está exausto! Você corre para o Centro Pokémon."
 
-        # --- LÓGICA DE ANEXO DE IMAGEM (CAMINHO SIMPLES E NOVO NOME DE PASTA) ---
+        # --- LÓGICA DE ANEXO DE IMAGEM (COM CAMINHO ABSOLUTO E NOVO NOME DE PASTA) ---
         
         discord_file = None
         filepath = ""
         
         try:
-            # Pega a região da tabela 'players', coluna 'current_region'
-            player_region = player.get('current_region', 'Kanto') 
+            player_region = player.get('current_region', 'Kanto')
             region_filename = f"{player_region.capitalize()}.png" 
             
-            # --- CORREÇÃO: Caminho relativo simples e nome da pasta "Regions" ---
-            filepath = os.path.join("assets", "Regions", region_filename)
+            # --- CORREÇÃO: Usa o caminho base absoluto e a pasta "Regions" ---
+            filepath = os.path.join(self.base_project_dir, "assets", "Regions", region_filename)
             
             if os.path.exists(filepath):
+                # Abre o arquivo em modo binário (rb)
                 with open(filepath, 'rb') as f:
                     discord_file = discord.File(f, filename="region_map.png")
             else:
