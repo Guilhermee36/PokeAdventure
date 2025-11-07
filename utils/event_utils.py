@@ -29,6 +29,20 @@ async def _check_team_fainted(supabase: Client, player_id: int) -> bool:
         return False
 
 
+async def _fetch_one(supabase: Client, table: str, **filters) -> dict | None:
+    """Helper seguro para evitar PGRST116 quando não há resultados."""
+    try:
+        q = supabase.table(table).select("*")
+        for k, v in filters.items():
+            q = q.eq(k, v)
+        res = q.limit(1).execute()
+        rows = res.data or []
+        return rows[0] if rows else None
+    except Exception as e:
+        print(f"[event_utils] _fetch_one erro ({table}, {filters}): {e}")
+        return None
+
+
 async def get_possible_events(supabase: Client, player_data: dict) -> list[str]:
     """
     Devolve a lista de eventos possíveis no local atual, considerando o estado do jogador.
@@ -44,20 +58,9 @@ async def get_possible_events(supabase: Client, player_data: dict) -> list[str]:
     if await _check_team_fainted(supabase, player_id):
         return ["pokemon_center"]
 
-    # Carrega dados do local atual
-    try:
-        loc_res = (
-            supabase.table("locations")
-            .select("*")
-            .eq("location_api_name", location_name)
-            .single()
-            .execute()
-        )
-        if not loc_res.data:
-            return []
-        loc = loc_res.data
-    except Exception as e:
-        print(f"[event_utils] Erro ao buscar localização: {e}")
+    # Carrega dados do local atual (safe)
+    loc = await _fetch_one(supabase, "locations", location_api_name=location_name)
+    if not loc:
         return []
 
     events: list[str] = []
@@ -82,7 +85,7 @@ async def get_possible_events(supabase: Client, player_data: dict) -> list[str]:
 
 
 # ============================================================
-# NOVO: Vizinhança/viagem restrita à MESMA região do jogador
+# Vizinhança/viagem restrita à MESMA região do jogador
 # ============================================================
 
 async def get_adjacent_locations_in_region(

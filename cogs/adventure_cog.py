@@ -139,28 +139,30 @@ class AdventureCog(commands.Cog):
         print("AdventureCog carregado.")
 
     # -------------------------
-    # Fetch helpers (Supabase)
+    # Fetch helpers (Supabase) — SAFE (sem .single())
     # -------------------------
 
+    async def _fetch_one(self, table: str, **filters) -> dict | None:
+        """
+        Busca uma linha com filtros simples (igualdade). Retorna None se 0 linhas.
+        Evita .single() para não disparar PGRST116 quando não há resultados.
+        """
+        try:
+            q = self.supabase.table(table).select("*")
+            for k, v in filters.items():
+                q = q.eq(k, v)
+            res = q.limit(1).execute()
+            rows = res.data or []
+            return rows[0] if rows else None
+        except Exception as e:
+            print(f"[Adventure] _fetch_one erro ({table}, {filters}): {e}")
+            return None
+
     async def _get_player_data(self, player_id: int) -> dict | None:
-        res = (
-            self.supabase.table("players")
-            .select("*")
-            .eq("discord_id", player_id)
-            .single()
-            .execute()
-        )
-        return res.data if res.data else None
+        return await self._fetch_one("players", discord_id=player_id)
 
     async def _get_location_data(self, location_name: str) -> dict | None:
-        res = (
-            self.supabase.table("locations")
-            .select("*")
-            .eq("location_api_name", location_name)
-            .single()
-            .execute()
-        )
-        return res.data if res.data else None
+        return await self._fetch_one("locations", location_api_name=location_name)
 
     # -------------------------
     # Missão (placeholder)
@@ -211,9 +213,12 @@ class AdventureCog(commands.Cog):
             await ctx.send(f"Você ainda não começou sua jornada, {ctx.author.mention}. Use `!start`!")
             return
 
-        location = await self._get_location_data(player["current_location_name"])
+        location = await self._get_location_data(player.get("current_location_name", ""))
         if not location:
-            await ctx.send("Erro: sua localização atual não foi encontrada no DB. Contate um admin.")
+            await ctx.send(
+                "Erro: sua localização atual não foi encontrada no DB. "
+                "Use `!start` novamente ou peça ajuda a um admin."
+            )
             return
 
         possible_events = await event_utils.get_possible_events(self.supabase, player)
@@ -237,7 +242,6 @@ class AdventureCog(commands.Cog):
         # Mapa da região (WEBP -> PNG)
         # ================================
         discord_file = None
-        filepath = ""
         try:
             player_region = player.get("current_region", "Kanto")
             # nome do arquivo: assets/Regions/Kanto.webp (preferência) ou Kanto.png (fallback)
@@ -273,7 +277,7 @@ class AdventureCog(commands.Cog):
             view.message = msg
 
         except Exception as e:
-            print(f"[Adventure] Erro geral ao anexar imagem ({filepath}): {e}")
+            print(f"[Adventure] Erro geral ao anexar imagem: {e}")
             embed.set_image(url=None)
             msg = await ctx.send(embed=embed, view=view)
             view.message = msg

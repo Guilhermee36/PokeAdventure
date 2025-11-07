@@ -2,15 +2,16 @@
 
 import os
 import random
+import asyncio
 import discord
 from discord.ext import commands
 from discord import ui
-from supabase import create_client, Client
-import asyncio
 
-# Imports centralizados
+from supabase import create_client, Client
+
+# Utils do projeto (mantidos)
 import utils.pokeapi_service as pokeapi
-import utils.evolution_utils as evolution_utils
+import utils.evolution_utils as evolution_utils  # (mantido para futuras evoluções)
 
 # ===============================================
 # Supabase helper
@@ -21,8 +22,21 @@ def get_supabase_client() -> Client:
     key: str = os.environ.get("SUPABASE_KEY")
     return create_client(url, key)
 
+# Helper de busca segura (evita .single() -> PGRST116)
+def supabase_fetch_one(supabase: Client, table: str, **filters) -> dict | None:
+    try:
+        q = supabase.table(table).select("*")
+        for k, v in filters.items():
+            q = q.eq(k, v)
+        res = q.limit(1).execute()
+        rows = res.data or []
+        return rows[0] if rows else None
+    except Exception as e:
+        print(f"[player_cog] fetch_one erro ({table}, {filters}): {e}")
+        return None
+
 # ===============================================
-# Spawn por região (NOVO)
+# Spawn por região (NOVO + mantido)
 # ===============================================
 
 REGION_SPAWNS: dict[str, str] = {
@@ -33,7 +47,7 @@ REGION_SPAWNS: dict[str, str] = {
     "Unova": "nuvema-town",
     "Kalos": "vaniville-town",
     # ajuste conforme seu schema
-    "Alola": "hauoli-city",   # se usar Iki Town, troque aqui
+    "Alola": "hauoli-city",  # se usar Iki Town, troque aqui
     "Galar": "postwick",
     "Paldea": "cabo-poco",
 }
@@ -42,7 +56,7 @@ def _spawn_for_region(region: str) -> str:
     return REGION_SPAWNS.get(region, "pallet-town")
 
 # ===============================================
-# Funções utilitárias do jogador / Pokémon
+# Funções utilitárias do jogador / Pokémon (mantidas)
 # ===============================================
 
 async def add_pokemon_to_player(
@@ -51,6 +65,10 @@ async def add_pokemon_to_player(
     level: int = 5,
     captured_at: str = "Início da Jornada",
 ) -> dict:
+    """
+    Lógica mantida: adiciona Pokémon ao jogador, respeitando party (<=6),
+    shiny roll 1/4096, stats calculados, moves iniciais e gênero.
+    """
     supabase = get_supabase_client()
 
     # Quantos Pokémon já estão na party (1-6)?
@@ -80,7 +98,7 @@ async def add_pokemon_to_player(
     calculated_stats = pokeapi.calculate_stats_for_level(poke_data["stats"], level)
     initial_moves = pokeapi.get_initial_moves(poke_data, level)
 
-    # --- LÓGICA DE GÊNERO E XP INICIAL (alinhada ao seu arquivo) ---
+    # Gênero e XP inicial (mantido)
     gender_ratio = -1
     starting_xp = 0
 
@@ -118,7 +136,7 @@ async def add_pokemon_to_player(
 
     try:
         insert_response = supabase.table("player_pokemon").insert(new_pokemon_data).execute()
-        if len(insert_response.data) > 0:
+        if insert_response.data:
             if is_going_to_box:
                 success_message = "Pokémon adicionado com sucesso e enviado para a Box (seu time está cheio)!"
             else:
@@ -127,10 +145,10 @@ async def add_pokemon_to_player(
         else:
             return {"success": False, "error": "Falha ao inserir o Pokémon no banco de dados."}
     except Exception as e:
-        return {"success": False, "error": f"Erro no banco de dados: {e}"}  # :contentReference[oaicite:10]{index=10}
+        return {"success": False, "error": f"Erro no banco de dados: {e}"}
 
 # ===============================================
-# UI de criação de personagem
+# UI / Fluxo de criação (mantido e consolidado)
 # ===============================================
 
 class StartJourneyView(ui.View):
@@ -166,7 +184,7 @@ class TrainerNameModal(ui.Modal, title="Crie seu Personagem"):
             embed=embed,
             view=RegionSelectView(trainer_name=trainer_name, supabase_client=self.supabase),
             ephemeral=True,
-        )  # :contentReference[oaicite:11]{index=11}
+        )
 
 
 class StarterSelectView(ui.View):
@@ -196,6 +214,8 @@ class StarterSelectView(ui.View):
 
     async def select_starter(self, interaction: discord.Interaction):
         starter_name = interaction.data["custom_id"]
+
+        # trava visual
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(view=self)
@@ -206,15 +226,19 @@ class StarterSelectView(ui.View):
             level=5,
             captured_at=f"Recebido em {self.region}",
         )
+
         if result["success"]:
             pokemon_data = result["data"]
             is_shiny = pokemon_data.get("is_shiny", False)
             shiny_text = "\n\n✨ **UAU, ELE É SHINY! QUE SORTE!** ✨" if is_shiny else ""
+
             public_embed = discord.Embed(
                 title="Uma Nova Jornada Começa!",
                 description=f"{interaction.user.mention} iniciou sua aventura e escolheu **{starter_name.capitalize()}** como seu primeiro parceiro!{shiny_text}",
                 color=discord.Color.green(),
             )
+
+            # thumbnail do Pokémon (mantido)
             poke_api_data = await pokeapi.get_pokemon_data(starter_name)
             if poke_api_data:
                 sprite_url = (
@@ -230,17 +254,18 @@ class StarterSelectView(ui.View):
                     )
                 if sprite_url:
                     public_embed.set_thumbnail(url=sprite_url)
+
             await interaction.followup.send(embed=public_embed)
         else:
             await interaction.followup.send(
                 f"Ocorreu um erro ao adicionar seu Pokémon: {result['error']}", ephemeral=True
             )
-        self.stop()  # :contentReference[oaicite:12]{index=12}
+        self.stop()
 
 
 class RegionSelectView(ui.View):
     """
-    Seleção de região com gravação do spawn correto.
+    Seleção de região com gravação do spawn correto (mantido e corrigido).
     """
     def __init__(self, trainer_name: str, supabase_client: Client):
         super().__init__(timeout=180)
@@ -254,19 +279,24 @@ class RegionSelectView(ui.View):
         await interaction.response.edit_message(view=self)
 
         discord_id = interaction.user.id
+
+        # Monta os dados do player (mantido) + spawn por região (corrigido)
         player_data = {
             "discord_id": discord_id,
             "trainer_name": self.trainer_name,
             "current_region": region,
-            # >>> AQUI: spawn por região! (antes: 'pallet-town' sempre) <<<
             "current_location_name": _spawn_for_region(region),
         }
 
         try:
             existing = (
-                self.supabase.table("players").select("discord_id").eq("discord_id", discord_id).execute()
+                self.supabase.table("players")
+                .select("discord_id")
+                .eq("discord_id", discord_id)
+                .limit(1)
+                .execute()
             )
-            if not existing.data:
+            if not (existing.data or []):
                 self.supabase.table("players").insert(player_data).execute()
             else:
                 self.supabase.table("players").update(player_data).eq("discord_id", discord_id).execute()
@@ -277,7 +307,9 @@ class RegionSelectView(ui.View):
                 color=discord.Color.blue(),
             )
             await interaction.followup.send(
-                embed=starter_embed, view=StarterSelectView(region=region), ephemeral=True
+                embed=starter_embed,
+                view=StarterSelectView(region=region),
+                ephemeral=True,
             )
 
         except Exception as e:
@@ -285,7 +317,7 @@ class RegionSelectView(ui.View):
 
         self.stop()
 
-    # Botões de região
+    # Botões de região (mantidos)
     @ui.button(label="Kanto", style=discord.ButtonStyle.primary, emoji="1️⃣", row=0)
     async def kanto(self, interaction: discord.Interaction, button: ui.Button):
         await self.select_region(interaction, "Kanto")
@@ -320,8 +352,42 @@ class RegionSelectView(ui.View):
 
     @ui.button(label="Paldea", style=discord.ButtonStyle.primary, emoji="9️⃣", row=2)
     async def paldea(self, interaction: discord.Interaction, button: ui.Button):
-        await self.select_region(interaction, "Paldea")  # :contentReference[oaicite:13]{index=13}
+        await self.select_region(interaction, "Paldea")
 
+# ===============================================
+# View de confirmação para o delete (NOVA)
+# ===============================================
+
+class ConfirmDeleteView(ui.View):
+    def __init__(self, supabase_client: Client, discord_id: int):
+        super().__init__(timeout=60)
+        self.supabase = supabase_client
+        self.discord_id = discord_id
+
+    @ui.button(label="Confirmar", style=discord.ButtonStyle.danger, emoji="✅")
+    async def confirm(self, interaction: discord.Interaction, button: ui.Button):
+        if interaction.user.id != self.discord_id:
+            await interaction.response.send_message("Você não pode confirmar esta ação.", ephemeral=True)
+            return
+        try:
+            # Apaga player e (opcional) cascatas, ajuste conforme constraints do seu schema
+            self.supabase.table("players").delete().eq("discord_id", self.discord_id).execute()
+            # Se for necessário, apagar os Pokémon do jogador:
+            # self.supabase.table("player_pokemon").delete().eq("player_id", self.discord_id).execute()
+            await interaction.response.edit_message(
+                content="Sua jornada foi **excluída** com sucesso.",
+                view=None,
+                embed=None,
+            )
+        except Exception as e:
+            await interaction.response.send_message(f"Erro ao excluir: {e}", ephemeral=True)
+
+    @ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def cancel(self, interaction: discord.Interaction, button: ui.Button):
+        if interaction.user.id != self.discord_id:
+            await interaction.response.send_message("Você não pode cancelar esta ação.", ephemeral=True)
+            return
+        await interaction.response.edit_message(content="Exclusão cancelada.", view=None, embed=None)
 
 # ===============================================
 # Cog do Jogador (comandos principais)
@@ -332,13 +398,10 @@ class PlayerCog(commands.Cog):
         self.bot = bot
         self.supabase = get_supabase_client()
 
-    # ------- helpers de inventário/condições (mantidos) -------
-    # (Seus outros métodos auxiliares e comandos foram mantidos; aqui estão os essenciais
-    #  para que o arquivo esteja completo e coeso com as mudanças de região/spawn.)
-
+    # ------- helpers (mantidos) -------
     async def player_exists(self, discord_id: int) -> bool:
         try:
-            res = self.supabase.table("players").select("discord_id").eq("discord_id", discord_id).execute()
+            res = self.supabase.table("players").select("discord_id").eq("discord_id", discord_id).limit(1).execute()
             return bool(res.data)
         except Exception:
             return False
@@ -349,6 +412,9 @@ class PlayerCog(commands.Cog):
 
     @commands.command(name="start")
     async def start_adventure(self, ctx: commands.Context):
+        """
+        Inicia o fluxo de criação: botão → modal (nome) → seleção de região → escolha de starter.
+        """
         if await self.player_exists(ctx.author.id):
             await ctx.send(f"Olá novamente, {ctx.author.mention}! Você já tem uma jornada em andamento.")
             return
@@ -357,46 +423,96 @@ class PlayerCog(commands.Cog):
             description="Clique no botão abaixo para criar seu personagem e dar o primeiro passo.",
             color=discord.Color.gold(),
         )
-        await ctx.send(embed=embed, view=StartJourneyView(supabase_client=self.supabase))  # :contentReference[oaicite:14]{index=14}
+        await ctx.send(embed=embed, view=StartJourneyView(supabase_client=self.supabase))
 
     @commands.command(name="profile")
     async def profile(self, ctx: commands.Context):
+        """
+        Mostra o perfil do jogador (safe fetch; avatar None-safe).
+        """
         try:
-            player = (
-                self.supabase.table("players").select("*").eq("discord_id", ctx.author.id).single().execute().data
-            )
+            player = supabase_fetch_one(self.supabase, "players", discord_id=ctx.author.id)
             if not player:
                 await ctx.send(f"Você ainda não começou sua jornada, {ctx.author.mention}. Use `!start` para iniciar!")
                 return
 
-            embed = discord.Embed(title=f"Perfil de: {player['trainer_name']}", color=discord.Color.green())
+            embed = discord.Embed(
+                title=f"Perfil de: {player.get('trainer_name', ctx.author.display_name)}",
+                color=discord.Color.green()
+            )
             embed.set_author(name=ctx.author.display_name, icon_url=getattr(ctx.author.avatar, "url", None))
             embed.add_field(name="💰 Dinheiro", value=f"${player.get('money', 0):,}", inline=True)
             embed.add_field(name="🏅 Insígnias", value=str(player.get("badges", 0)), inline=True)
             loc = player.get("current_location_name", "Desconhecida").replace("-", " ").title()
             embed.add_field(name="📍 Localização", value=loc, inline=False)
+            embed.add_field(name="🌍 Região", value=player.get("current_region", "—"), inline=True)
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(f"Ocorreu um erro ao buscar seu perfil: {e}")  # :contentReference[oaicite:15]{index=15}
+            await ctx.send(f"Ocorreu um erro ao buscar seu perfil: {e}")
 
     @commands.command(name="delete")
     async def delete_journey(self, ctx: commands.Context):
+        """
+        Abre uma view de confirmação para excluir TODO o progresso do jogador.
+        (Sem ephemeral em ctx.send, pois não é interaction.)
+        """
         if not await self.player_exists(ctx.author.id):
             await ctx.send(f"Você não tem uma jornada para excluir, {ctx.author.mention}.")
             return
+
         embed = discord.Embed(
             title="⚠️ Atenção: Excluir Jornada ⚠️",
-            description="Você tem certeza que deseja excluir **todo** o seu progresso? Esta ação é **irreversível**.",
+            description=(
+                "Você tem certeza que deseja excluir **todo** o seu progresso?\n\n"
+                "Esta ação é **irreversível**. Clique em **Confirmar** para prosseguir."
+            ),
             color=discord.Color.red(),
         )
-        # Você pode ter a ConfirmDeleteView no seu projeto; mantemos a chamada.
-        await ctx.send(embed=embed)  # ajuste se usar uma View específica
+        await ctx.send(embed=embed, view=ConfirmDeleteView(self.supabase, ctx.author.id))
+
+    @commands.command(name="addpokemon")
+    async def add_pokemon_cmd(self, ctx: commands.Context, pokemon_api_name: str, level: int = 5):
+        """
+        Comando de utilidade/admin para adicionar um Pokémon ao jogador atual.
+        Mantém a lógica original: texto (sem view).
+        """
+        if not await self.player_exists(ctx.author.id):
+            await ctx.send("Você precisa iniciar sua jornada primeiro (`!start`).")
+            return
+
+        if level < 1:
+            level = 1
+        if level > 100:
+            level = 100
+
+        result = await add_pokemon_to_player(
+            player_id=ctx.author.id,
+            pokemon_api_name=pokemon_api_name.lower(),
+            level=level,
+            captured_at="Comando addpokemon",
+        )
+        if result["success"]:
+            p = result["data"]
+            await ctx.send(
+                f"✅ **{p.get('nickname', pokemon_api_name.capitalize())}** adicionado! "
+                f"(nível {p.get('current_level', level)}; "
+                f"{'shiny' if p.get('is_shiny') else 'normal'})"
+            )
+        else:
+            await ctx.send(f"❌ Erro: {result['error']}")
 
     @commands.command(name="help")
     async def custom_help(self, ctx: commands.Context):
         embed = discord.Embed(
             title="Ajuda do PokeAdventure",
-            description="Comandos principais: `!start`, `!adventure`, `!profile`.",
+            description=(
+                "Comandos principais:\n"
+                "`!start` — criar personagem\n"
+                "`!adventure` — explorar o mundo\n"
+                "`!profile` — ver seu perfil\n"
+                "`!delete` — excluir sua jornada\n"
+                "`!addpokemon <nome> [level]` — adicionar Pokémon ao seu time/box"
+            ),
             color=discord.Color.blurple(),
         )
         await ctx.send(embed=embed)
