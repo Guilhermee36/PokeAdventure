@@ -1,91 +1,120 @@
 # utils/event_utils.py
 
 from supabase import Client
-import json
+
+# ============================================================
+# Helpers de estado do time / eventos possíveis por localização
+# ============================================================
 
 async def _check_team_fainted(supabase: Client, player_id: int) -> bool:
     """Verifica se todos os Pokémon na party do jogador estão desmaiados."""
     try:
-        # Busca apenas os HPs da party (posições 1-6)
-        res = supabase.table("player_pokemon") \
-            .select("current_hp") \
-            .eq("player_id", player_id) \
-            .filter("party_position", "not.is", "null") \
+        res = (
+            supabase.table("player_pokemon")
+            .select("current_hp")
+            .eq("player_id", player_id)
+            .filter("party_position", "not.is", "null")
             .execute()
-        
-        if not res.data:
-            return True # Sem time? Considera "desmaiado"
+        )
 
-        # Se todos os HPs forem 0 ou menos, retorne True
-        return all(p['current_hp'] <= 0 for p in res.data)
-        
+        if not res.data:
+            # Sem time? Trate como 'sem condições de batalha'
+            return True
+
+        return all(p["current_hp"] <= 0 for p in res.data)
+
     except Exception as e:
-        print(f"Erro ao checar time desmaiado: {e}")
-        return False # Assume que não está desmaiado se houver erro
+        print(f"[event_utils] Erro ao checar time desmaiado: {e}")
+        # Em caso de erro, seja permissivo
+        return False
+
 
 async def get_possible_events(supabase: Client, player_data: dict) -> list[str]:
     """
-    Verifica a localização atual e o estado do jogador para retornar
-    uma lista de eventos (ações) possíveis.
+    Devolve a lista de eventos possíveis no local atual, considerando o estado do jogador.
     """
-    
     try:
-        player_id = player_data['discord_id']
-        location_name = player_data['current_location_name']
-        badges = player_data.get('badges', 0)
+        player_id = player_data["discord_id"]
+        location_name = player_data["current_location_name"]
+        badges = player_data.get("badges", 0)
     except KeyError:
-        return [] # player_data incompleto
-
-    # Regra 3 (Contexto): Time desmaiado
-    if await _check_team_fainted(supabase, player_id):
-        # Se o time estiver desmaiado, a única opção é ir ao Centro Pokémon.
-        # (A lógica do 'adventure_cog' deve forçar isso)
-        return ['pokemon_center']
-
-    # Busca os dados da localização atual
-    try:
-        loc_res = supabase.table("locations") \
-            .select("*") \
-            .eq("location_api_name", location_name) \
-            .single() \
-            .execute()
-        
-        if not loc_res.data:
-            return [] # Localização não existe no DB
-        
-        loc = loc_res.data
-    except Exception as e:
-        print(f"Erro ao buscar localização: {e}")
         return []
 
-    events = []
+    # Regra: se o time estiver desmaiado, só Centro Pokémon
+    if await _check_team_fainted(supabase, player_id):
+        return ["pokemon_center"]
 
-    # Regra 1 (Cidade)
-    if loc['type'] == 'city':
-        events.append('talk_npc') # Sempre pode tentar falar com NPCs
-        events.append('pokemon_center') # Toda cidade tem um (implícito)
+    # Carrega dados do local atual
+    try:
+        loc_res = (
+            supabase.table("locations")
+            .select("*")
+            .eq("location_api_name", location_name)
+            .single()
+            .execute()
+        )
+        if not loc_res.data:
+            return []
+        loc = loc_res.data
+    except Exception as e:
+        print(f"[event_utils] Erro ao buscar localização: {e}")
+        return []
 
-        if loc.get('has_shop', False):
-            events.append('shop')
+    events: list[str] = []
 
-        if loc.get('has_gym', False):
-            req_badges = loc.get('gym_badge_required', 0)
+    if loc["type"] == "city":
+        events += ["talk_npc", "pokemon_center"]
+        if loc.get("has_shop", False):
+            events.append("shop")
+        if loc.get("has_gym", False):
+            req_badges = loc.get("gym_badge_required", 0)
             if badges >= req_badges:
-                events.append('challenge_gym')
+                events.append("challenge_gym")
+        # cidades permitem viagem
+        events.append("move_to_route")
 
-        # Cidades sempre permitem viajar
-        events.append('move_to_route')
-
-    # Regra 2 (Rota)
-    elif loc['type'] == 'route':
-        events.append('wild_encounter')
-        events.append('find_item')
-        
-        # TODO: Implementar Regra 3 (trainer_battle)
-        # Isso exigirá consultar npcs(location_api_name) e player_defeated_npcs
-        # events.append('trainer_battle') 
-        
-        # Rotas sempre permitem viajar
-        events.append('move_to_location')
+    elif loc["type"] == "route":
+        events += ["wild_encounter", "find_item"]
+        # rotas permitem viagem
+        events.append("move_to_location")
 
     return events
+
+
+# ============================================================
+# NOVO: Vizinhança/viagem restrita à MESMA região do jogador
+# ============================================================
+
+async def get_adjacent_locations_in_region(
+    supabase: Client, from_location_api_name: str, region: str
+) -> list[dict]:
+    """
+    Retorna as locations alcançáveis a partir de `from_location_api_name`,
+    **restritas** à mesma `region`. Evita teleporte cross-region quando
+    há nomes repetidos (ex.: 'route-1' em várias regiões).
+    """
+    try:
+        # 1) rotas que partem do local atual
+        routes_res = (
+            supabase.table("routes")
+            .select("location_to")
+            .eq("location_from", from_location_api_name)
+            .execute()
+        )
+        to_names = [r["location_to"] for r in (routes_res.data or [])]
+        if not to_names:
+            return []
+
+        # 2) filtra destino por 'locations.region'
+        locs_res = (
+            supabase.table("locations")
+            .select("location_api_name, name_pt, name, type, region, has_gym, has_shop")
+            .in_("location_api_name", to_names)
+            .eq("region", region)
+            .execute()
+        )
+        return locs_res.data or []
+
+    except Exception as e:
+        print(f"[event_utils] erro ao montar adjacências por região: {e}")
+        return []
