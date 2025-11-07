@@ -134,7 +134,7 @@ class AdventureCog(commands.Cog):
         url: str = os.environ.get("SUPABASE_URL")
         key: str = os.environ.get("SUPABASE_KEY")
         self.supabase: Client = create_client(url, key)
-        # caminho base do projeto (para achar assets/Regions/<Região>.png)
+        # caminho base do projeto (para achar assets/Regions/<Região>.webp/.png)
         self.base_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         print("AdventureCog carregado.")
 
@@ -150,7 +150,7 @@ class AdventureCog(commands.Cog):
             .single()
             .execute()
         )
-        return res.data if res.data else None  # :contentReference[oaicite:4]{index=4}
+        return res.data if res.data else None
 
     async def _get_location_data(self, location_name: str) -> dict | None:
         res = (
@@ -160,7 +160,7 @@ class AdventureCog(commands.Cog):
             .single()
             .execute()
         )
-        return res.data if res.data else None  # :contentReference[oaicite:5]{index=5}
+        return res.data if res.data else None
 
     # -------------------------
     # Missão (placeholder)
@@ -176,13 +176,14 @@ class AdventureCog(commands.Cog):
             if location.get("has_gym", False):
                 return ("Desafio da Cidade", "Derrote o Líder de Ginásio.")
             return ("Exploração", "Converse com os habitantes locais.")
-        return ("Exploração", "Explore a área.")  # :contentReference[oaicite:6]{index=6}
+        return ("Exploração", "Explore a área.")
 
     async def _build_adventure_embed(
         self, player: dict, location: dict, mission: tuple[str, str]
     ) -> discord.Embed:
         """
         Constrói o embed principal do Adventure.
+        (Imagem é definida no envio da mensagem, conforme WEBP/PNG encontrado.)
         """
         location_name_pt = location.get(
             "name_pt", player["current_location_name"].replace("-", " ").title()
@@ -194,9 +195,9 @@ class AdventureCog(commands.Cog):
         )
         mission_title, mission_desc = mission
         embed.add_field(name=f"🎯 {mission_title}", value=mission_desc, inline=False)
-        embed.set_image(url="attachment://region_map.png")
+        # imagem será setada depois (WEBP/PNG)
         embed.set_footer(text=f"Explorando como {player['trainer_name']}.")
-        return embed  # :contentReference[oaicite:7]{index=7}
+        return embed
 
     # -------------------------
     # Comando principal
@@ -232,20 +233,35 @@ class AdventureCog(commands.Cog):
             embed.color = discord.Color.red()
             embed.description = "Seu time está exausto! Você corre para o Centro Pokémon."
 
-        # Tenta anexar o mapa da região: assets/Regions/<Região>.png
+        # ================================
+        # Mapa da região (WEBP -> PNG)
+        # ================================
         discord_file = None
         filepath = ""
         try:
             player_region = player.get("current_region", "Kanto")
-            region_filename = f"{player_region.capitalize()}.png"
-            filepath = os.path.join(self.base_project_dir, "assets", "Regions", region_filename)
+            # nome do arquivo: assets/Regions/Kanto.webp (preferência) ou Kanto.png (fallback)
+            region_base = player_region.capitalize()
+            candidates = [f"{region_base}.webp", f"{region_base}.png"]
 
-            if os.path.exists(filepath):
-                with open(filepath, "rb") as f:
-                    discord_file = discord.File(f, filename="region_map.png")
+            chosen_path = None
+            chosen_attachment_name = None
+
+            for fname in candidates:
+                path = os.path.join(self.base_project_dir, "assets", "Regions", fname)
+                if os.path.exists(path):
+                    chosen_path = path
+                    ext = fname.rsplit(".", 1)[-1].lower()
+                    chosen_attachment_name = f"region_map.{ext}"
+                    break
+
+            if chosen_path:
+                with open(chosen_path, "rb") as f:
+                    discord_file = discord.File(f, filename=chosen_attachment_name)
+                embed.set_image(url=f"attachment://{chosen_attachment_name}")
             else:
                 embed.set_image(url=None)
-                print(f"[Adventure] AVISO: Mapa não encontrado em {filepath}")
+                print(f"[Adventure] AVISO: Nenhum mapa encontrado (tentado: {', '.join(candidates)})")
 
             msg = await ctx.send(embed=embed, view=view, file=discord_file)
             view.message = msg
@@ -342,7 +358,7 @@ class AdventureCog(commands.Cog):
             await sender(embed=embed, view=view, ephemeral=True)
 
         except Exception as e:
-            await sender(f"Ocorreu um erro ao buscar rotas: {e}")  # :contentReference[oaicite:8]{index=8}
+            await sender(f"Ocorreu um erro ao buscar rotas: {e}")
 
     async def action_move_to(self, interaction: discord.Interaction, player: dict, new_location_api_name: str):
         try:
