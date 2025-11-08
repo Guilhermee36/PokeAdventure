@@ -1,402 +1,243 @@
-# cogs/adventure_cog.py
+# adventure_cog.py
+# Cog de aventura com navegação segura por locations/routes.
+# Mantém o estilo do seu projeto: embed + botões (View), sem mudar player repo.  :contentReference[oaicite:3]{index=3}
 
-import os
+from __future__ import annotations
+
+import asyncio
+from typing import Optional, List, Tuple
+
 import discord
 from discord.ext import commands
 from discord import ui
-from supabase import create_client, Client
 
-import utils.event_utils as event_utils
-
-# ==========================
-# View principal do Adventure
-# ==========================
-
-class AdventureView(ui.View):
-    """
-    Renderiza os botões de ação com base nos 'possible_events'.
-    A própria view recebe o player e a location para validar cliques.
-    """
-    def __init__(self, possible_events: list[str], cog_instance: "AdventureCog"):
-        super().__init__(timeout=300)
-        self.cog = cog_instance
-        self.player: dict | None = None
-        self.location: dict | None = None
-
-        # Mapa de botões por evento
-        event_map: dict[str, ui.Button] = {
-            "wild_encounter": ui.Button(
-                label="Procurar Pokémon", emoji="🌿",
-                custom_id="adv:wild", style=discord.ButtonStyle.primary, row=0
-            ),
-            "move_to_location": ui.Button(
-                label="Mudar de Rota", emoji="🗺️",
-                custom_id="adv:travel", style=discord.ButtonStyle.secondary, row=1
-            ),
-            "find_item": ui.Button(
-                label="Investigar Área", emoji="🎒",
-                custom_id="adv:find_item", style=discord.ButtonStyle.secondary, row=1
-            ),
-            "pokemon_center": ui.Button(
-                label="Centro Pokémon", emoji="🏥",
-                custom_id="adv:heal", style=discord.ButtonStyle.primary, row=0
-            ),
-            "shop": ui.Button(
-                label="Loja", emoji="🛒",
-                custom_id="adv:shop", style=discord.ButtonStyle.secondary, row=1
-            ),
-            "challenge_gym": ui.Button(
-                label="Desafiar Ginásio", emoji="🏅",
-                custom_id="adv:gym", style=discord.ButtonStyle.danger, row=0
-            ),
-            "talk_npc": ui.Button(
-                label="Falar (NPC)", emoji="💬",
-                custom_id="adv:talk", style=discord.ButtonStyle.secondary, row=1
-            ),
-            # alias (compatibilidade)
-            "move_to_route": ui.Button(
-                label="Mudar de Rota", emoji="🗺️",
-                custom_id="adv:travel", style=discord.ButtonStyle.secondary, row=1
-            ),
-        }
-
-        # Só adiciona os botões mapeados
-        for event_name in possible_events:
-            button = event_map.get(event_name)
-            if button:
-                # Cada botão aponta para o mesmo callback (identificamos pelo custom_id)
-                button.callback = self.on_button_click
-                self.add_item(button)
-
-    async def on_button_click(self, interaction: discord.Interaction):
-        # Segurança: botões são do dono do contexto
-        if not self.player or interaction.user.id != self.player["discord_id"]:
-            await interaction.response.send_message("Estes não são seus botões!", ephemeral=True)
-            return
-
-        # Desabilita todos para evitar duplo clique
-        for item in self.children:
-            item.disabled = True
-        await interaction.response.edit_message(view=self)
-
-        action = str(interaction.data.get("custom_id", "")).split(":")[-1]
-        # shop responde imediatamente (para mensagem efêmera), o resto usa followup
-        respond_now = (action == "shop")
-        await self.cog.handle_adventure_action(
-            interaction, self.player, self.location, action, respond_now=respond_now
-        )
+from evolution_cog import event_utils  # funções auxiliares definidas acima  :contentReference[oaicite:4]{index=4}
 
 
-# =====================
-# View para escolher rota
-# =====================
+def slug_to_title(s: str) -> str:
+    return s.replace("-", " ").title()
 
-class TravelView(ui.View):
-    def __init__(self, destinations: list[dict], cog_instance: "AdventureCog"):
-        """
-        `destinations` vem de event_utils.get_adjacent_locations_in_region()
-        e já traz: location_api_name, name_pt/name, type, etc.
-        """
+
+class TravelViewSafe(ui.View):
+    """View de viagem robusta: lida com lista vazia, gates e alternância História/Livre."""
+    def __init__(self, db, player, region: str, current_loc: str, mainline_only: bool):
         super().__init__(timeout=180)
-        self.cog = cog_instance
-        self.player: dict | None = None
+        self.db = db
+        self.player = player
+        self.region = region
+        self.current_loc = current_loc
+        self.mainline_only = mainline_only
+        self.destinations: List[Tuple[str, Optional[int]]] = []
+        self.message: Optional[discord.Message] = None
 
-        for loc in destinations:
-            api_name = loc["location_api_name"]
-            # prioriza 'name_pt', depois 'name', depois o api_name formatado
-            label = loc.get("name_pt") or loc.get("name") or api_name.replace("-", " ").title()
-            button = ui.Button(label=label, custom_id=f"travel:{api_name}")
-            button.callback = self.on_travel_click
-            self.add_item(button)
+    async def on_timeout(self):
+        for child in self.children:
+            if isinstance(child, ui.Button):
+                child.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except Exception:
+                pass
 
-    async def on_travel_click(self, interaction: discord.Interaction):
-        if not self.player or interaction.user.id != self.player["discord_id"]:
-            await interaction.response.send_message("Estes não são seus botões!", ephemeral=True)
+    async def _reload_destinations(self):
+        self.destinations = await event_utils.get_permitted_destinations(
+            self.db, self.player, self.region, self.current_loc, mainline_only=self.mainline_only
+        )
+        self.clear_items()
+
+        # Nenhum destino → mostra aviso e botão para alternar modo
+        if not self.destinations:
+            self.add_item(ui.Button(label="Sem destinos disponíveis", disabled=True))
+            toggle_label = "Modo Livre" if self.mainline_only else "Modo História"
+            self.add_item(ToggleModeButton(toggle_label, self))
             return
-        # trava visual
-        for item in self.children:
-            item.disabled = True
-        await interaction.response.edit_message(view=None)
 
-        new_location = str(interaction.data.get("custom_id", "")).split(":")[-1]
-        await self.cog.action_move_to(interaction, self.player, new_location)
+        # Cria botões de destino (limite de 10 por simplicidade)
+        for loc_to, step in self.destinations[:10]:
+            label = f"{slug_to_title(loc_to)}"
+            if step is not None:
+                label = f"[{step}] {label}"
+            self.add_item(GoButton(label, loc_to, self))
 
+        # Botão para alternar modo
+        toggle_label = "Modo Livre" if self.mainline_only else "Modo História"
+        self.add_item(ToggleModeButton(toggle_label, self))
 
-# ============
-# Cog principal
-# ============
-
-class AdventureCog(commands.Cog):
-    """Exploração, eventos e interações com o mundo."""
-
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-        url: str = os.environ.get("SUPABASE_URL")
-        key: str = os.environ.get("SUPABASE_KEY")
-        self.supabase: Client = create_client(url, key)
-        # caminho base do projeto (para achar assets/Regions/<Região>.webp/.png)
-        self.base_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        print("AdventureCog carregado.")
-
-    # -------------------------
-    # Fetch helpers (Supabase) — SAFE (sem .single())
-    # -------------------------
-
-    async def _fetch_one(self, table: str, **filters) -> dict | None:
-        """
-        Busca uma linha com filtros simples (igualdade). Retorna None se 0 linhas.
-        Evita .single() para não disparar PGRST116 quando não há resultados.
-        """
-        try:
-            q = self.supabase.table(table).select("*")
-            for k, v in filters.items():
-                q = q.eq(k, v)
-            res = q.limit(1).execute()
-            rows = res.data or []
-            return rows[0] if rows else None
-        except Exception as e:
-            print(f"[Adventure] _fetch_one erro ({table}, {filters}): {e}")
-            return None
-
-    async def _get_player_data(self, player_id: int) -> dict | None:
-        return await self._fetch_one("players", discord_id=player_id)
-
-    async def _get_location_data(self, location_name: str) -> dict | None:
-        return await self._fetch_one("locations", location_api_name=location_name)
-
-    # -------------------------
-    # Missão (placeholder)
-    # -------------------------
-
-    def _get_location_mission(self, location: dict, player: dict) -> tuple[str, str]:
-        """
-        Placeholder simples para enriquecer o embed.
-        """
-        if location.get("location_api_name") == "route-1":
-            return ("Progresso da Rota", "Derrote 10 Pokémon selvagens. (0/10)")
-        if location.get("type") == "city":
-            if location.get("has_gym", False):
-                return ("Desafio da Cidade", "Derrote o Líder de Ginásio.")
-            return ("Exploração", "Converse com os habitantes locais.")
-        return ("Exploração", "Explore a área.")
-
-    async def _build_adventure_embed(
-        self, player: dict, location: dict, mission: tuple[str, str]
-    ) -> discord.Embed:
-        """
-        Constrói o embed principal do Adventure.
-        (Imagem é definida no envio da mensagem, conforme WEBP/PNG encontrado.)
-        """
-        location_name_pt = location.get(
-            "name_pt", player["current_location_name"].replace("-", " ").title()
-        )
+    async def _make_embed(self) -> discord.Embed:
+        title = f"{slug_to_title(self.current_loc)} • {self.region}"
+        mode = "História" if self.mainline_only else "Livre"
         embed = discord.Embed(
-            title=f"📍 Local: {location_name_pt}",
-            description=f"O que você gostaria de fazer, {player['trainer_name']}?",
-            color=discord.Color.dark_green(),
+            title=title,
+            description=f"Modo: **{mode}**\nEscolha seu próximo destino.",
+            color=discord.Color.blurple()
         )
-        mission_title, mission_desc = mission
-        embed.add_field(name=f"🎯 {mission_title}", value=mission_desc, inline=False)
-        # imagem será setada depois (WEBP/PNG)
-        embed.set_footer(text=f"Explorando como {player['trainer_name']}.")
+
+        # Info de localização (para possíveis eventos)
+        info = await event_utils.get_location_info(self.db, self.current_loc)
+        if info:
+            evts = event_utils.get_possible_events(info.get("type") or "route", bool(info.get("has_gym")))
+            embed.add_field(
+                name="Eventos possíveis",
+                value="• " + "\n• ".join(evts),
+                inline=False
+            )
+
+        # Lista de destinos
+        if not self.destinations:
+            embed.add_field(
+                name="Destinos",
+                value="Nenhum destino disponível (gates não cumpridos ou sem rotas).",
+                inline=False
+            )
+        else:
+            lines = []
+            for loc, step in self.destinations[:10]:
+                s = f"`{step:02d}` " if step is not None else ""
+                lines.append(f"{s}**{slug_to_title(loc)}**")
+            embed.add_field(name="Destinos", value="\n".join(lines), inline=False)
+
         return embed
 
-    # -------------------------
-    # Comando principal
-    # -------------------------
-
-    @commands.command(name="adventure", aliases=["adv", "a"])
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def adventure(self, ctx: commands.Context):
-        player = await self._get_player_data(ctx.author.id)
-        if not player:
-            await ctx.send(f"Você ainda não começou sua jornada, {ctx.author.mention}. Use `!start`!")
-            return
-
-        location = await self._get_location_data(player.get("current_location_name", ""))
-        if not location:
-            await ctx.send(
-                "Erro: sua localização atual não foi encontrada no DB. "
-                "Use `!start` novamente ou peça ajuda a um admin."
-            )
-            return
-
-        possible_events = await event_utils.get_possible_events(self.supabase, player)
-        if not possible_events:
-            await ctx.send("Você olha ao redor, mas não há nada de interessante para fazer agora.")
-            return
-
-        view = AdventureView(possible_events, self)
-        view.player = player
-        view.location = location
-
-        mission_data = self._get_location_mission(location, player)
-        embed = await self._build_adventure_embed(player, location, mission_data)
-
-        # Estado 'forçado' de Centro Pokémon
-        if "pokemon_center" in possible_events and len(possible_events) == 1:
-            embed.color = discord.Color.red()
-            embed.description = "Seu time está exausto! Você corre para o Centro Pokémon."
-
-        # ================================
-        # Mapa da região (WEBP -> PNG)
-        # ================================
-        discord_file = None
-        try:
-            player_region = player.get("current_region", "Kanto")
-            # nome do arquivo: assets/Regions/Kanto.webp (preferência) ou Kanto.png (fallback)
-            region_base = player_region.capitalize()
-            candidates = [f"{region_base}.webp", f"{region_base}.png"]
-
-            chosen_path = None
-            chosen_attachment_name = None
-
-            for fname in candidates:
-                path = os.path.join(self.base_project_dir, "assets", "Regions", fname)
-                if os.path.exists(path):
-                    chosen_path = path
-                    ext = fname.rsplit(".", 1)[-1].lower()
-                    chosen_attachment_name = f"region_map.{ext}"
-                    break
-
-            if chosen_path:
-                with open(chosen_path, "rb") as f:
-                    discord_file = discord.File(f, filename=chosen_attachment_name)
-                embed.set_image(url=f"attachment://{chosen_attachment_name}")
+    async def send_or_update(self, ctx_or_inter):
+        embed = await self._make_embed()
+        await self._reload_destinations()
+        if isinstance(ctx_or_inter, discord.Interaction):
+            if self.message:
+                await ctx_or_inter.edit_original_response(embed=embed, view=self)
             else:
-                embed.set_image(url=None)
-                print(f"[Adventure] AVISO: Nenhum mapa encontrado (tentado: {', '.join(candidates)})")
-
-            msg = await ctx.send(embed=embed, view=view, file=discord_file)
-            view.message = msg
-
-        except discord.HTTPException as e:
-            print(f"[Adventure] HTTPException ao anexar imagem: {e}")
-            embed.set_image(url=None)
-            msg = await ctx.send(embed=embed, view=view)
-            view.message = msg
-
-        except Exception as e:
-            print(f"[Adventure] Erro geral ao anexar imagem: {e}")
-            embed.set_image(url=None)
-            msg = await ctx.send(embed=embed, view=view)
-            view.message = msg
-
-    # -------------------------
-    # Handlers / Ações
-    # -------------------------
-
-    async def handle_adventure_action(
-        self,
-        interaction: discord.Interaction,
-        player: dict,
-        location: dict,
-        action: str,
-        respond_now: bool = False,
-    ):
-        sender = interaction.response.send_message if respond_now else interaction.followup.send
-
-        if action == "heal":
-            await self.action_heal_team(player["discord_id"], sender)
-        elif action == "travel":
-            await self.action_show_travel(interaction, player, location, sender)
-        elif action == "shop":
-            await sender("Você se dirige à loja. Use `!shop` para ver os itens ou `!buy` para comprar.", ephemeral=True)
-        elif action == "wild":
-            await sender("Você começa a procurar na grama alta... (Encontro selvagem em breve!)")
-        elif action == "gym":
-            await sender("Você está na porta do Ginásio. (Desafio ao líder em breve!)")
-        elif action == "talk":
-            await sender("Você procura alguém para conversar. (Interações com NPCs em breve!)")
-        elif action == "find_item":
-            await sender("Você vasculha a área. (Procura por itens em breve!)")
-
-    async def action_heal_team(self, player_id: int, sender):
-        try:
-            party_res = (
-                self.supabase.table("player_pokemon")
-                .select("id, max_hp")
-                .eq("player_id", player_id)
-                .filter("party_position", "not.is", "null")
-                .execute()
-            )
-            if not party_res.data:
-                await sender("Você não tem Pokémon no seu time para curar.")
-                return
-
-            for p in party_res.data:
-                (
-                    self.supabase.table("player_pokemon")
-                    .update({"current_hp": p["max_hp"]})
-                    .eq("id", p["id"])
-                    .execute()
-                )
-            await sender("🏥 Seu time foi completamente curado!")
-
-        except Exception as e:
-            await sender(f"Ocorreu um erro ao curar seu time: {e}")
-
-    async def action_show_travel(self, interaction: discord.Interaction, player: dict, location: dict, sender):
-        """
-        Mostra destinos alcançáveis a partir do local atual, **filtrados pela região do jogador**.
-        """
-        try:
-            destinations = await event_utils.get_adjacent_locations_in_region(
-                supabase=self.supabase,
-                from_location_api_name=location["location_api_name"],
-                region=player["current_region"],
-            )
-
-            if not destinations:
-                await sender("Não há rotas conectadas a este local.")
-                return
-
-            view = TravelView(destinations, self)
-            view.player = player
-
-            embed = discord.Embed(
-                title="Para onde você quer ir?",
-                description="Escolha seu destino:",
-                color=discord.Color.blue(),
-            )
-            await sender(embed=embed, view=view, ephemeral=True)
-
-        except Exception as e:
-            await sender(f"Ocorreu um erro ao buscar rotas: {e}")
-
-    async def action_move_to(self, interaction: discord.Interaction, player: dict, new_location_api_name: str):
-        try:
-            (
-                self.supabase.table("players")
-                .update({"current_location_name": new_location_api_name})
-                .eq("discord_id", player["discord_id"])
-                .execute()
-            )
-            loc_data = await self._get_location_data(new_location_api_name)
-            new_loc_name_pt = (
-                (loc_data or {}).get("name_pt")
-                or (loc_data or {}).get("name")
-                or new_location_api_name.replace("-", " ").title()
-            )
-            await interaction.followup.send(f"Você viajou para **{new_loc_name_pt}**!")
-
-        except Exception as e:
-            await interaction.followup.send(f"Ocorreu um erro ao viajar: {e}")
-
-    # -------------------------
-    # Error handler
-    # -------------------------
-
-    @adventure.error
-    async def adventure_error(self, ctx: commands.Context, error):
-        if isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(f"Você está explorando. (Disponível em {error.retry_after:.1f}s)", delete_after=3)
+                self.message = await ctx_or_inter.followup.send(embed=embed, view=self, wait=True)
         else:
-            await ctx.send(f"Ocorreu um erro no comando !adventure: {error}")
-            print(f"[Adventure] Erro no !adventure: {error}")
+            if self.message:
+                await self.message.edit(embed=embed, view=self)
+            else:
+                self.message = await ctx_or_inter.send(embed=embed, view=self)
+
+    # Utilidade para persistir a movimentação (ponto de integração)
+    async def _persist_move(self, user_id: int, new_location: str):
+        """
+        PONTO DE INTEGRAÇÃO:
+        Substitua pelo seu repo/serviço de jogadores.
+        Ex.: await self.db.execute("UPDATE players SET location_api_name=%s WHERE id=%s", new_location, user_id)
+        ou chame PlayerRepo.move_to(user_id, new_location)
+        """
+        # placeholder no-op; ajuste conforme seu projeto
+        pass
 
 
-# ---- setup do cog ----
+class GoButton(ui.Button):
+    def __init__(self, label: str, target_loc: str, view_ref: TravelViewSafe):
+        super().__init__(style=discord.ButtonStyle.primary, label=label, custom_id=f"go::{target_loc}")
+        self.target_loc = target_loc
+        self.view_ref = view_ref
 
-async def setup(bot: commands.Bot):
-    await bot.add_cog(AdventureCog(bot))
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False, thinking=False)
+
+        # Confere se o destino ainda está permitido
+        current_allowed = {loc for loc, _ in self.view_ref.destinations}
+        if self.target_loc not in current_allowed:
+            await interaction.followup.send("Esse destino não está mais disponível. Atualizando…", ephemeral=True)
+            await self.view_ref.send_or_update(interaction)
+            return
+
+        # Persiste a movimentação do jogador (integração com seu repo)
+        try:
+            await self.view_ref._persist_move(interaction.user.id, self.target_loc)
+        except Exception:
+            # se ainda não integrou, ignore silenciosamente
+            pass
+
+        # Atualiza estado da view e do embed
+        self.view_ref.current_loc = self.target_loc
+        await self.view_ref.send_or_update(interaction)
+
+
+class ToggleModeButton(ui.Button):
+    def __init__(self, label: str, view_ref: TravelViewSafe):
+        super().__init__(style=discord.ButtonStyle.secondary, label=label, custom_id="toggle_mode")
+        self.view_ref = view_ref
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False, thinking=False)
+        self.view_ref.mainline_only = not self.view_ref.mainline_only
+        await self.view_ref.send_or_update(interaction)
+
+
+class AdventureCog(commands.Cog):
+    """
+    Cog de Aventura:
+    - Comando `travel` para navegar no mundo por routes/locations de forma segura.
+    - NÃO altera seu módulo de players (integração por método privado).
+    """
+    def __init__(self, bot: commands.Bot, db, player_repo):
+        """
+        bot: instância do discord.py
+        db: conector assíncrono com .fetch/.fetchrow (ex.: asyncpg / supabase-async)
+        player_repo: serviço existente do seu projeto (não alterado)
+            - esperado: await player_repo.get_or_create(user_id)
+            - o objeto player deve ter: region (str), location_api_name (str),
+              badges (int ou lista), flags (lista) se existirem.
+        """
+        self.bot = bot
+        self.db = db
+        self.player_repo = player_repo
+
+    # ---------- Integrações privadas (não mudam seu players) ----------
+
+    async def _get_player(self, user_id: int):
+        """
+        Usa seu repositório existente de players.  :contentReference[oaicite:5]{index=5}
+        """
+        return await self.player_repo.get_or_create(user_id)
+
+    async def _move_player(self, user_id: int, new_location: str):
+        """
+        Atualiza a localização do player usando seu repositório (sem mudar contrato).
+        Se seu repo tiver outro nome de método, ajuste aqui.
+        """
+        # Exemplos possíveis:
+        # await self.player_repo.move_to(user_id, new_location)
+        # ou:
+        # await self.db.execute("UPDATE players SET location_api_name=%s WHERE user_id=%s", new_location, user_id)
+        try:
+            await self.player_repo.move_to(user_id, new_location)  # se existir
+        except AttributeError:
+            # fallback: tente uma atualização direta via DB, se fizer sentido no seu projeto
+            await self.db.execute(
+                "UPDATE players SET location_api_name=%s WHERE user_id=%s",
+                new_location,
+                user_id,
+            )
+
+    # ---------- Comandos públicos ----------
+
+    @commands.command(name="travel")
+    async def cmd_travel(self, ctx: commands.Context, mode: Optional[str] = None):
+        """
+        Mostra destinos a partir da location atual.
+        Ex.: !travel            -> modo Livre
+             !travel historia   -> modo História (segue is_mainline/step)
+        """
+        player = await self._get_player(ctx.author.id)
+        region = getattr(player, "region", None) or "Kanto"
+        current_loc = getattr(player, "location_api_name", None) or "pallet-town"
+        mainline_only = (mode or "").lower() in ("historia", "história", "story")
+
+        view = TravelViewSafe(self.db, player, region, current_loc, mainline_only)
+
+        # injeta integrador de movimentação na própria view
+        async def _persist_move(user_id: int, new_loc: str):
+            await self._move_player(user_id, new_loc)
+        view._persist_move = _persist_move  # type: ignore
+
+        await view.send_or_update(ctx)
+
+
+# Setup padrão do discord.py
+async def setup(bot: commands.Bot, db, player_repo):
+    """
+    Chame em seu loader passando `db` e `player_repo` do seu projeto:
+    await adventure_cog.setup(bot, db, player_repo)
+    """
+    await bot.add_cog(AdventureCog(bot, db, player_repo))
