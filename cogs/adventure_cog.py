@@ -1,243 +1,424 @@
 # adventure_cog.py
-# Cog de aventura com navegação segura por locations/routes.
-# Mantém o estilo do seu projeto: embed + botões (View), sem mudar player repo.  :contentReference[oaicite:3]{index=3}
+# -*- coding: utf-8 -*-
 
 from __future__ import annotations
+from typing import Any, Dict, List, Optional, Tuple
 
 import asyncio
-from typing import Optional, List, Tuple
+import math
+import datetime as dt
 
 import discord
 from discord.ext import commands
-from discord import ui
 
-from evolution_cog import event_utils  # funções auxiliares definidas acima  :contentReference[oaicite:4]{index=4}
+# utilitários do seu projeto
+from utils import event_utils  # espera: get_permitted_destinations, get_location_info
+
+# ============================================================
+# Helpers (apresentação)
+# ============================================================
+
+def slug_to_title(slug: str) -> str:
+    if not slug:
+        return "—"
+    return slug.replace("-", " ").title()
+
+def fmt_bool(b: Optional[bool]) -> str:
+    return "✅" if b else "—"
+
+# ============================================================
+# Modelo “adapter” do Player (evita depender do formato real)
+# ============================================================
+
+class PlayerAdapter:
+    """
+    Adapta o objeto/dict de player para a interface esperada pelo fluxo.
+    Garante defaults seguros para badges/flags.
+    """
+    def __init__(self, raw: Any, user_id: int):
+        # Em alguns casos virá como objeto com atributos; em outros, como dict
+        get = (lambda k, d=None: getattr(raw, k, d)) if not isinstance(raw, dict) else (lambda k, d=None: raw.get(k, d))
+
+        # campos (tentamos ambos os padrões)
+        self.id = get("discord_id") or get("id") or user_id
+        self.region = get("region") or get("current_region") or "Kanto"
+        self.location_api_name = get("location_api_name") or get("current_location_name") or "pallet-town"
+
+        # progresso
+        badges_val = get("badges", 0)
+        self.badges: int = int(badges_val or 0)
+
+        flags_val = get("flags", [])
+        if flags_val is None:
+            flags_val = []
+        self.flags: List[str] = list(flags_val)
+
+    def as_display(self) -> str:
+        return f"Região: **{self.region}** · Local: **{slug_to_title(self.location_api_name)}** · Badges: **{self.badges}**"
 
 
-def slug_to_title(s: str) -> str:
-    return s.replace("-", " ").title()
+# ============================================================
+# View/Buttons
+# ============================================================
 
+MAX_DEST_PER_PAGE = 10
 
-class TravelViewSafe(ui.View):
-    """View de viagem robusta: lida com lista vazia, gates e alternância História/Livre."""
-    def __init__(self, db, player, region: str, current_loc: str, mainline_only: bool):
-        super().__init__(timeout=180)
+class TravelViewSafe(discord.ui.View):
+    def __init__(
+        self,
+        *,
+        bot: commands.Bot,
+        db,  # conector com .fetch/.fetchrow para event_utils
+        author_id: int,
+        player: PlayerAdapter,
+        mainline_only: bool,
+        timeout: Optional[float] = 120.0,
+    ):
+        super().__init__(timeout=timeout)
+        self.bot = bot
         self.db = db
+        self.author_id = author_id
         self.player = player
-        self.region = region
-        self.current_loc = current_loc
         self.mainline_only = mainline_only
-        self.destinations: List[Tuple[str, Optional[int]]] = []
+
         self.message: Optional[discord.Message] = None
 
-    async def on_timeout(self):
-        for child in self.children:
-            if isinstance(child, ui.Button):
-                child.disabled = True
-        if self.message:
-            try:
-                await self.message.edit(view=self)
-            except Exception:
-                pass
+        # paginação
+        self.page = 0
+        self._dest_cache: List[Tuple[str, Optional[int]]] = []  # (location_to, step)
+
+        # callback de persistência é injetado pelo Cog
+        self._persist_move = None  # type: Optional[callable]
+
+        # desenha controles “fixos”
+        self._draw_static_controls()
+
+    # ------------- permissionamento -------------
+    def _is_owner(self, user: discord.abc.User) -> bool:
+        return int(user.id) == int(self.author_id)
+
+    async def interaction_guard(self, interaction: discord.Interaction) -> bool:
+        if not self._is_owner(interaction.user):
+            await interaction.response.send_message(
+                "Só o dono desta jornada pode usar estes botões.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    # ------------- UI building -------------
+
+    def _draw_static_controls(self):
+        # Botão alternar modo (História/Livre)
+        label = "Modo: História" if self.mainline_only else "Modo: Livre"
+        style = discord.ButtonStyle.primary if self.mainline_only else discord.ButtonStyle.secondary
+
+        self.toggle_button = discord.ui.Button(label=label, style=style, row=0)
+        self.toggle_button.callback = self.on_toggle_mode  # type: ignore
+        self.add_item(self.toggle_button)
+
+        # Página anterior / próxima
+        self.prev_btn = discord.ui.Button(emoji="◀", style=discord.ButtonStyle.secondary, row=0)
+        self.next_btn = discord.ui.Button(emoji="▶", style=discord.ButtonStyle.secondary, row=0)
+        self.prev_btn.callback = self.on_prev  # type: ignore
+        self.next_btn.callback = self.on_next  # type: ignore
+        self.add_item(self.prev_btn)
+        self.add_item(self.next_btn)
+
+        # Refresh
+        self.refresh_btn = discord.ui.Button(emoji="🔄", style=discord.ButtonStyle.secondary, row=0)
+        self.refresh_btn.callback = self.on_refresh  # type: ignore
+        self.add_item(self.refresh_btn)
+
+    def _clear_dynamic_buttons(self):
+        # remove apenas os itens de destino (linhas 1..)
+        keep = [self.toggle_button, self.prev_btn, self.next_btn, self.refresh_btn]
+        self.clear_items()
+        for item in keep:
+            self.add_item(item)
+
+    def _add_destination_buttons(self, page_dests: List[Tuple[str, Optional[int]]]):
+        # cria até 10 botões de destino (linha 1..2)
+        for idx, (loc_to, step) in enumerate(page_dests):
+            label = slug_to_title(loc_to)
+            if step is not None:
+                label = f"{step:02d} · {label}"
+
+            btn = discord.ui.Button(
+                label=label[:80],  # limite de segurança
+                style=discord.ButtonStyle.success if step is not None else discord.ButtonStyle.secondary,
+                row=1 + (idx // 5)
+            )
+            # bind do destino
+            async def go_cb(interaction: discord.Interaction, _loc=loc_to):
+                await self.on_go(interaction, _loc)
+            btn.callback = go_cb  # type: ignore
+            self.add_item(btn)
+
+    def _slice_for_page(self) -> List[Tuple[str, Optional[int]]]:
+        start = self.page * MAX_DEST_PER_PAGE
+        end = start + MAX_DEST_PER_PAGE
+        return self._dest_cache[start:end]
 
     async def _reload_destinations(self):
-        self.destinations = await event_utils.get_permitted_destinations(
-            self.db, self.player, self.region, self.current_loc, mainline_only=self.mainline_only
+        # recarrega do BD, aplicando gates
+        self._dest_cache = await event_utils.get_permitted_destinations(
+            self.db,
+            region=self.player.region,
+            location_api_name=self.player.location_api_name,
+            player=self.player,
+            mainline_only=self.mainline_only,
         )
-        self.clear_items()
+        # Ajusta paginação dentro do range
+        max_page = max(0, math.ceil(len(self._dest_cache) / MAX_DEST_PER_PAGE) - 1)
+        self.page = max(0, min(self.page, max_page))
 
-        # Nenhum destino → mostra aviso e botão para alternar modo
-        if not self.destinations:
-            self.add_item(ui.Button(label="Sem destinos disponíveis", disabled=True))
-            toggle_label = "Modo Livre" if self.mainline_only else "Modo História"
-            self.add_item(ToggleModeButton(toggle_label, self))
-            return
+    async def _render(self, interaction: Optional[discord.Interaction] = None):
+        # dados da location atual
+        loc_info = await event_utils.get_location_info(
+            self.db, self.player.region, self.player.location_api_name
+        )
+        title = f"🧭 Viagem — {slug_to_title(self.player.location_api_name)}"
+        desc_lines = [
+            self.player.as_display(),
+            "",
+        ]
+        if loc_info:
+            desc_lines.append(
+                f"Tipo: **{loc_info.get('type', '—')}** · Gym: {fmt_bool(loc_info.get('has_gym'))} · Shop: {fmt_bool(loc_info.get('has_shop'))}"
+            )
+        desc_lines.append("")
+        desc_lines.append("Escolha um destino abaixo para viajar:")
 
-        # Cria botões de destino (limite de 10 por simplicidade)
-        for loc_to, step in self.destinations[:10]:
-            label = f"{slug_to_title(loc_to)}"
-            if step is not None:
-                label = f"[{step}] {label}"
-            self.add_item(GoButton(label, loc_to, self))
-
-        # Botão para alternar modo
-        toggle_label = "Modo Livre" if self.mainline_only else "Modo História"
-        self.add_item(ToggleModeButton(toggle_label, self))
-
-    async def _make_embed(self) -> discord.Embed:
-        title = f"{slug_to_title(self.current_loc)} • {self.region}"
-        mode = "História" if self.mainline_only else "Livre"
         embed = discord.Embed(
             title=title,
-            description=f"Modo: **{mode}**\nEscolha seu próximo destino.",
-            color=discord.Color.blurple()
+            description="\n".join(desc_lines),
+            color=discord.Color.blurple(),
+            timestamp=dt.datetime.utcnow()
         )
+        embed.set_footer(text="Dica: use ◀ ▶ para navegar entre páginas de destinos.")
 
-        # Info de localização (para possíveis eventos)
-        info = await event_utils.get_location_info(self.db, self.current_loc)
-        if info:
-            evts = event_utils.get_possible_events(info.get("type") or "route", bool(info.get("has_gym")))
-            embed.add_field(
-                name="Eventos possíveis",
-                value="• " + "\n• ".join(evts),
-                inline=False
-            )
+        # refaz botões dinâmicos
+        self._clear_dynamic_buttons()
+        page_dests = self._slice_for_page()
+        self._add_destination_buttons(page_dests)
 
-        # Lista de destinos
-        if not self.destinations:
-            embed.add_field(
-                name="Destinos",
-                value="Nenhum destino disponível (gates não cumpridos ou sem rotas).",
-                inline=False
-            )
-        else:
-            lines = []
-            for loc, step in self.destinations[:10]:
-                s = f"`{step:02d}` " if step is not None else ""
-                lines.append(f"{s}**{slug_to_title(loc)}**")
-            embed.add_field(name="Destinos", value="\n".join(lines), inline=False)
+        # estado dos botões fixos
+        self.toggle_button.label = "Modo: História" if self.mainline_only else "Modo: Livre"
+        self.toggle_button.style = discord.ButtonStyle.primary if self.mainline_only else discord.ButtonStyle.secondary
+        self.prev_btn.disabled = self.page <= 0
+        self.next_btn.disabled = (self.page + 1) * MAX_DEST_PER_PAGE >= len(self._dest_cache)
 
-        return embed
-
-    async def send_or_update(self, ctx_or_inter):
-        embed = await self._make_embed()
-        await self._reload_destinations()
-        if isinstance(ctx_or_inter, discord.Interaction):
-            if self.message:
-                await ctx_or_inter.edit_original_response(embed=embed, view=self)
+        if interaction:
+            if interaction.response.is_done():
+                await interaction.edit_original_response(embed=embed, view=self)
             else:
-                self.message = await ctx_or_inter.followup.send(embed=embed, view=self, wait=True)
+                await interaction.response.edit_message(embed=embed, view=self)
         else:
             if self.message:
                 await self.message.edit(embed=embed, view=self)
-            else:
-                self.message = await ctx_or_inter.send(embed=embed, view=self)
 
-    # Utilidade para persistir a movimentação (ponto de integração)
-    async def _persist_move(self, user_id: int, new_location: str):
-        """
-        PONTO DE INTEGRAÇÃO:
-        Substitua pelo seu repo/serviço de jogadores.
-        Ex.: await self.db.execute("UPDATE players SET location_api_name=%s WHERE id=%s", new_location, user_id)
-        ou chame PlayerRepo.move_to(user_id, new_location)
-        """
-        # placeholder no-op; ajuste conforme seu projeto
-        pass
+    # ------------- Button Callbacks -------------
 
+    async def on_toggle_mode(self, interaction: discord.Interaction):
+        if not await self.interaction_guard(interaction):
+            return
+        self.mainline_only = not self.mainline_only
+        self.page = 0
+        await self._reload_destinations()
+        await self._render(interaction)
 
-class GoButton(ui.Button):
-    def __init__(self, label: str, target_loc: str, view_ref: TravelViewSafe):
-        super().__init__(style=discord.ButtonStyle.primary, label=label, custom_id=f"go::{target_loc}")
-        self.target_loc = target_loc
-        self.view_ref = view_ref
+    async def on_prev(self, interaction: discord.Interaction):
+        if not await self.interaction_guard(interaction):
+            return
+        if self.page > 0:
+            self.page -= 1
+            await self._render(interaction)
 
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False, thinking=False)
+    async def on_next(self, interaction: discord.Interaction):
+        if not await self.interaction_guard(interaction):
+            return
+        if (self.page + 1) * MAX_DEST_PER_PAGE < len(self._dest_cache):
+            self.page += 1
+            await self._render(interaction)
 
-        # Confere se o destino ainda está permitido
-        current_allowed = {loc for loc, _ in self.view_ref.destinations}
-        if self.target_loc not in current_allowed:
-            await interaction.followup.send("Esse destino não está mais disponível. Atualizando…", ephemeral=True)
-            await self.view_ref.send_or_update(interaction)
+    async def on_refresh(self, interaction: discord.Interaction):
+        if not await self.interaction_guard(interaction):
+            return
+        await self._reload_destinations()
+        await self._render(interaction)
+
+    async def on_go(self, interaction: discord.Interaction, target_slug: str):
+        if not await self.interaction_guard(interaction):
             return
 
-        # Persiste a movimentação do jogador (integração com seu repo)
-        try:
-            await self.view_ref._persist_move(interaction.user.id, self.target_loc)
-        except Exception:
-            # se ainda não integrou, ignore silenciosamente
-            pass
+        # Revalida se o destino ainda é permitido
+        await self._reload_destinations()
+        allowed = {d[0] for d in self._dest_cache}
+        if target_slug not in allowed:
+            await interaction.response.send_message(
+                "Esse destino não está mais disponível. Atualizei a lista pra você.",
+                ephemeral=True,
+            )
+            await self._render()
+            return
 
-        # Atualiza estado da view e do embed
-        self.view_ref.current_loc = self.target_loc
-        await self.view_ref.send_or_update(interaction)
+        # Persiste e move
+        if callable(self._persist_move):
+            await self._persist_move(self.author_id, target_slug)
+
+        # Atualiza player local e UI
+        self.player.location_api_name = target_slug
+        self.page = 0
+        await self._reload_destinations()
+
+        await interaction.response.defer()
+        await self._render()
+
+    # ------------- lifecycle -------------
+
+    async def start(self, ctx: commands.Context):
+        await self._reload_destinations()
+        embed = discord.Embed(
+            title=f"🧭 Viagem — {slug_to_title(self.player.location_api_name)}",
+            description="Carregando destinos...",
+            color=discord.Color.blurple(),
+        )
+        self.message = await ctx.send(embed=embed, view=self)
+        await self._render()
+
+    async def on_timeout(self) -> None:
+        # desabilita a view ao expirar
+        for item in self.children:
+            item.disabled = True  # type: ignore
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
 
 
-class ToggleModeButton(ui.Button):
-    def __init__(self, label: str, view_ref: TravelViewSafe):
-        super().__init__(style=discord.ButtonStyle.secondary, label=label, custom_id="toggle_mode")
-        self.view_ref = view_ref
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False, thinking=False)
-        self.view_ref.mainline_only = not self.view_ref.mainline_only
-        await self.view_ref.send_or_update(interaction)
-
+# ============================================================
+# Cog
+# ============================================================
 
 class AdventureCog(commands.Cog):
     """
-    Cog de Aventura:
-    - Comando `travel` para navegar no mundo por routes/locations de forma segura.
-    - NÃO altera seu módulo de players (integração por método privado).
+    Cog de viagem/aventura:
+    - Comando: !travel [historia|livre] (default: historia)
+    - Mostra destinos paginados, com gating e persistência de movimento.
     """
-    def __init__(self, bot: commands.Bot, db, player_repo):
-        """
-        bot: instância do discord.py
-        db: conector assíncrono com .fetch/.fetchrow (ex.: asyncpg / supabase-async)
-        player_repo: serviço existente do seu projeto (não alterado)
-            - esperado: await player_repo.get_or_create(user_id)
-            - o objeto player deve ter: region (str), location_api_name (str),
-              badges (int ou lista), flags (lista) se existirem.
-        """
+    def __init__(self, bot: commands.Bot, db, player_repo=None):
         self.bot = bot
-        self.db = db
-        self.player_repo = player_repo
+        self.db = db  # precisa expor .fetch/.fetchrow para event_utils
+        self.player_repo = player_repo  # opcional; se não houver, cai no UPDATE direto
 
-    # ---------- Integrações privadas (não mudam seu players) ----------
+    # ----------------- Helpers de player/persistência -----------------
 
-    async def _get_player(self, user_id: int):
+    async def _load_player(self, user_id: int) -> PlayerAdapter:
         """
-        Usa seu repositório existente de players.  :contentReference[oaicite:5]{index=5}
+        Busca o player pelo repositório (se houver) ou por SELECT simples.
+        Adapta o payload ao modelo usado na navegação.
         """
-        return await self.player_repo.get_or_create(user_id)
+        raw = None
+        if self.player_repo and hasattr(self.player_repo, "get_or_create"):
+            raw = await self.player_repo.get_or_create(user_id)
 
-    async def _move_player(self, user_id: int, new_location: str):
-        """
-        Atualiza a localização do player usando seu repositório (sem mudar contrato).
-        Se seu repo tiver outro nome de método, ajuste aqui.
-        """
-        # Exemplos possíveis:
-        # await self.player_repo.move_to(user_id, new_location)
-        # ou:
-        # await self.db.execute("UPDATE players SET location_api_name=%s WHERE user_id=%s", new_location, user_id)
-        try:
-            await self.player_repo.move_to(user_id, new_location)  # se existir
-        except AttributeError:
-            # fallback: tente uma atualização direta via DB, se fizer sentido no seu projeto
-            await self.db.execute(
-                "UPDATE players SET location_api_name=%s WHERE user_id=%s",
-                new_location,
-                user_id,
+        # fallback: tenta buscar direto no BD
+        if raw is None:
+            row = await self.db.fetchrow(
+                """
+                SELECT discord_id, current_region, current_location_name, badges, flags
+                FROM public.players
+                WHERE discord_id = $1
+                """,
+                int(user_id),
             )
+            if row is None:
+                # cria um registro mínimo (spawn Pallet)
+                await self.db.fetchrow(
+                    """
+                    INSERT INTO public.players (discord_id, current_region, current_location_name, badges, flags)
+                    VALUES ($1, 'Kanto', 'pallet-town', 0, '[]'::jsonb)
+                    RETURNING discord_id, current_region, current_location_name, badges, flags
+                    """,
+                    int(user_id),
+                )
+                row = await self.db.fetchrow(
+                    """
+                    SELECT discord_id, current_region, current_location_name, badges, flags
+                    FROM public.players
+                    WHERE discord_id = $1
+                    """,
+                    int(user_id),
+                )
+            raw = row
 
-    # ---------- Comandos públicos ----------
+        return PlayerAdapter(raw, user_id)
 
-    @commands.command(name="travel")
-    async def cmd_travel(self, ctx: commands.Context, mode: Optional[str] = None):
+    async def _move_player(self, user_id: int, new_location_slug: str):
         """
-        Mostra destinos a partir da location atual.
-        Ex.: !travel            -> modo Livre
-             !travel historia   -> modo História (segue is_mainline/step)
+        Persiste a movimentação do jogador.
+        Preferência: player_repo.move_to; fallback: UPDATE em players.current_location_name.
         """
-        player = await self._get_player(ctx.author.id)
-        region = getattr(player, "region", None) or "Kanto"
-        current_loc = getattr(player, "location_api_name", None) or "pallet-town"
-        mainline_only = (mode or "").lower() in ("historia", "história", "story")
+        # 1) Repositório, se existir
+        if self.player_repo and hasattr(self.player_repo, "move_to"):
+            await self.player_repo.move_to(user_id, new_location_slug)
+            return
 
-        view = TravelViewSafe(self.db, player, region, current_loc, mainline_only)
+        # 2) UPDATE direto (Supabase/asyncpg)
+        await self.db.fetchrow(
+            """
+            UPDATE public.players
+               SET current_location_name = $1,
+                   updated_at = NOW()
+             WHERE discord_id = $2
+            RETURNING discord_id
+            """,
+            new_location_slug,
+            int(user_id),
+        )
 
-        # injeta integrador de movimentação na própria view
-        async def _persist_move(user_id: int, new_loc: str):
-            await self._move_player(user_id, new_loc)
-        view._persist_move = _persist_move  # type: ignore
+    # ----------------- Comando -----------------
 
-        await view.send_or_update(ctx)
+    @commands.command(name="travel", aliases=["viagem", "viajar"])
+    @commands.cooldown(1, 5, type=commands.BucketType.user)
+    async def travel_cmd(self, ctx: commands.Context, modo: Optional[str] = None):
+        """
+        Use:
+          !travel           -> modo história
+          !travel livre     -> modo livre
+          !travel historia  -> modo história
+        """
+        user_id = int(ctx.author.id)
+        player = await self._load_player(user_id)
+
+        modo = (modo or "historia").strip().lower()
+        mainline_only = False if modo in ("livre", "free", "open") else True
+
+        view = TravelViewSafe(
+            bot=self.bot,
+            db=self.db,
+            author_id=user_id,
+            player=player,
+            mainline_only=mainline_only,
+            timeout=180.0,
+        )
+        # injeta a função de persistência
+        async def _persist_move(uid: int, loc: str):
+            await self._move_player(uid, loc)
+        view._persist_move = _persist_move
+
+        await view.start(ctx)
 
 
-# Setup padrão do discord.py
-async def setup(bot: commands.Bot, db, player_repo):
+# ============================================================
+# Setup
+# ============================================================
+
+async def setup(bot: commands.Bot, db, player_repo=None):
     """
-    Chame em seu loader passando `db` e `player_repo` do seu projeto:
+    Registrar o cog com injeção de dependências:
     await adventure_cog.setup(bot, db, player_repo)
     """
     await bot.add_cog(AdventureCog(bot, db, player_repo))
