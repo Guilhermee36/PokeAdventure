@@ -74,7 +74,7 @@ def get_adjacent_routes(
     Compatível com Supabase Python síncrono.
     """
     print(f"[event_utils:get_adjacent_routes] region={region!r} location_from={location_from!r} "
-          f"mainline_only={mainline_only}")
+          f"mainline_only={mainline_only}", flush=True)
     try:
         q = (
             supabase.table("routes")
@@ -88,10 +88,10 @@ def get_adjacent_routes(
         q = q.order("step").order("location_to")
         res = q.execute()
         data = list(res.data or [])
-        print(f"[event_utils:get_adjacent_routes] rows={len(data)} sample={data[:2]}")
+        print(f"[event_utils:get_adjacent_routes] rows={len(data)} sample={data[:2]}", flush=True)
         return data
     except Exception as e:
-        print(f"[event_utils:get_adjacent_routes][ERROR] {e}")
+        print(f"[event_utils:get_adjacent_routes][ERROR] {e}", flush=True)
         return []
 
 
@@ -103,7 +103,7 @@ def get_next_mainline_edge(
     """
     Retorna a próxima rota principal a partir de `location_from`.
     """
-    print(f"[event_utils:get_next_mainline_edge] region={region!r} location_from={location_from!r}")
+    print(f"[event_utils:get_next_mainline_edge] region={region!r} location_from={location_from!r}", flush=True)
     try:
         q = (
             supabase
@@ -118,10 +118,10 @@ def get_next_mainline_edge(
         res = q.execute()
         rows = res.data or []
         edge = dict(rows[0]) if rows else None
-        print(f"[event_utils:get_next_mainline_edge] found={bool(edge)} edge={edge}")
+        print(f"[event_utils:get_next_mainline_edge] found={bool(edge)} edge={edge}", flush=True)
         return edge
     except Exception as e:
-        print(f"[event_utils:get_next_mainline_edge][ERROR] {e}")
+        print(f"[event_utils:get_next_mainline_edge][ERROR] {e}", flush=True)
         return None
 
 
@@ -144,9 +144,9 @@ def get_permitted_destinations(
         }
     """
     print(f"[event_utils:get_permitted_destinations] region={region!r} from={location_from!r} "
-          f"mainline_only={mainline_only}")
+          f"mainline_only={mainline_only}", flush=True)
     edges = get_adjacent_routes(supabase, region, location_from, mainline_only=mainline_only)
-    print(f"[event_utils:get_permitted_destinations] edges={len(edges)}")
+    print(f"[event_utils:get_permitted_destinations] edges={len(edges)}", flush=True)
 
     allowed: List[Dict] = []
     try:
@@ -161,10 +161,10 @@ def get_permitted_destinations(
                 })
         # Ordena por passo (se existir), depois alfabético
         allowed.sort(key=lambda d: (d["step"] is None, d["step"] or 10**9, d["location_to"]))
-        print(f"[event_utils:get_permitted_destinations] allowed={len(allowed)} sample={allowed[:2]}")
+        print(f"[event_utils:get_permitted_destinations] allowed={len(allowed)} sample={allowed[:2]}", flush=True)
         return allowed
     except Exception as e:
-        print(f"[event_utils:get_permitted_destinations][ERROR] {e}")
+        print(f"[event_utils:get_permitted_destinations][ERROR] {e}", flush=True)
         return []
 
 
@@ -172,7 +172,7 @@ def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
     """
     Retorna informações básicas de uma location.
     """
-    print(f"[event_utils:get_location_info] location_api_name={location_api_name!r}")
+    print(f"[event_utils:get_location_info] location_api_name={location_api_name!r}", flush=True)
     try:
         res = (
             supabase
@@ -184,8 +184,8 @@ def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
         )
         rows = res.data or []
         info = dict(rows[0]) if rows else None
-        print(f"[event_utils:get_location_info] found={bool(info)} info={info}")
+        print(f"[event_utils:get_location_info] found={bool(info)} info={info}", flush=True)
         return info
     except Exception as e:
-        print(f"[event_utils:get_location_info][ERROR] {e}")
+        print(f"[event_utils:get_location_info][ERROR] {e}", flush=True)
         return None
