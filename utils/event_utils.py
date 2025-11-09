@@ -1,6 +1,6 @@
 # utils/event_utils.py
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 import json
 
 # ==============================================================
@@ -59,7 +59,7 @@ def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
 
 
 # ==============================================================
-#  🗺️ Consultas de local e rotas
+#  🗺️ Consultas de local e rotas (Supabase client síncrono)
 # ==============================================================
 
 def get_adjacent_routes(
@@ -73,6 +73,8 @@ def get_adjacent_routes(
     Retorna todas as rotas conectadas a `location_from` na região dada.
     Compatível com Supabase Python síncrono.
     """
+    print(f"[event_utils:get_adjacent_routes] region={region!r} location_from={location_from!r} "
+          f"mainline_only={mainline_only}")
     try:
         q = (
             supabase.table("routes")
@@ -85,9 +87,11 @@ def get_adjacent_routes(
 
         q = q.order("step").order("location_to")
         res = q.execute()
-        return list(res.data or [])
+        data = list(res.data or [])
+        print(f"[event_utils:get_adjacent_routes] rows={len(data)} sample={data[:2]}")
+        return data
     except Exception as e:
-        print(f"[event_utils] Erro em get_adjacent_routes: {e}")
+        print(f"[event_utils:get_adjacent_routes][ERROR] {e}")
         return []
 
 
@@ -99,6 +103,7 @@ def get_next_mainline_edge(
     """
     Retorna a próxima rota principal a partir de `location_from`.
     """
+    print(f"[event_utils:get_next_mainline_edge] region={region!r} location_from={location_from!r}")
     try:
         q = (
             supabase
@@ -112,9 +117,11 @@ def get_next_mainline_edge(
         )
         res = q.execute()
         rows = res.data or []
-        return dict(rows[0]) if rows else None
+        edge = dict(rows[0]) if rows else None
+        print(f"[event_utils:get_next_mainline_edge] found={bool(edge)} edge={edge}")
+        return edge
     except Exception as e:
-        print(f"[event_utils] Erro em get_next_mainline_edge: {e}")
+        print(f"[event_utils:get_next_mainline_edge][ERROR] {e}")
         return None
 
 
@@ -128,31 +135,44 @@ def get_permitted_destinations(
 ) -> List[Dict]:
     """
     Filtra as rotas adjacentes por 'gate' e retorna destinos liberados.
-    Retorna lista de dicts no formato:
-        { "location_to": str, "step": int | None, "is_mainline": bool, "gate": dict }
+    Retorna lista de DICTS no formato:
+        {
+          "location_to": str,
+          "step": int | None,
+          "is_mainline": bool,
+          "gate": dict
+        }
     """
+    print(f"[event_utils:get_permitted_destinations] region={region!r} from={location_from!r} "
+          f"mainline_only={mainline_only}")
     edges = get_adjacent_routes(supabase, region, location_from, mainline_only=mainline_only)
+    print(f"[event_utils:get_permitted_destinations] edges={len(edges)}")
 
     allowed: List[Dict] = []
-    for e in edges:
-        gate = _coerce_gate(e.get("gate"))
-        if gate_allows(player, gate):
-            allowed.append({
-                "location_to": e["location_to"],
-                "step": e.get("step"),
-                "is_mainline": e.get("is_mainline", False),
-                "gate": gate
-            })
-
-    # Ordena por passo (se existir), depois alfabético
-    allowed.sort(key=lambda t: (t["step"] is None, t["step"] or 10**9, t["location_to"]))
-    return allowed
+    try:
+        for e in edges:
+            gate = _coerce_gate(e.get("gate"))
+            if gate_allows(player, gate):
+                allowed.append({
+                    "location_to": e["location_to"],
+                    "step": e.get("step"),
+                    "is_mainline": e.get("is_mainline", False),
+                    "gate": gate
+                })
+        # Ordena por passo (se existir), depois alfabético
+        allowed.sort(key=lambda d: (d["step"] is None, d["step"] or 10**9, d["location_to"]))
+        print(f"[event_utils:get_permitted_destinations] allowed={len(allowed)} sample={allowed[:2]}")
+        return allowed
+    except Exception as e:
+        print(f"[event_utils:get_permitted_destinations][ERROR] {e}")
+        return []
 
 
 def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
     """
     Retorna informações básicas de uma location.
     """
+    print(f"[event_utils:get_location_info] location_api_name={location_api_name!r}")
     try:
         res = (
             supabase
@@ -163,7 +183,9 @@ def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
             .execute()
         )
         rows = res.data or []
-        return dict(rows[0]) if rows else None
+        info = dict(rows[0]) if rows else None
+        print(f"[event_utils:get_location_info] found={bool(info)} info={info}")
+        return info
     except Exception as e:
-        print(f"[event_utils] Erro em get_location_info: {e}")
+        print(f"[event_utils:get_location_info][ERROR] {e}")
         return None
