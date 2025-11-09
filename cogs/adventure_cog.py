@@ -158,51 +158,49 @@ class TravelViewSafe(discord.ui.View):
             print(f"[TravelViewSafe:_perform_travel][ERROR] {e}", flush=True)
             await self.message.channel.send(f"Não consegui viajar agora: `{e}`")
 
-def _rebuild_select(self):
-    """Reconstrói o Select com as opções da página atual."""
-    # remove select anterior (se existir)
-    if self._select and self._select in self.children:
-        self.remove_item(self._select)
+    def _rebuild_select(self):
+        """Reconstrói o Select com as opções da página atual."""
+        # remove select anterior
+        if self._select and self._select in self.children:
+            self.remove_item(self._select)
 
-    options = []
-    for idx, d in enumerate(self._page_slice(), 1):
-        to_slug = d.get("location_to")
-        label = slug_to_title(to_slug)
-        desc = []
-        if d.get("is_mainline"):
-            desc.append("Rota principal")
-        if d.get("step") is not None:
-            desc.append(f"Passo {d['step']}")
-        options.append(
-            discord.SelectOption(
-                label=f"{idx}. {label}",
-                value=to_slug,
-                description=" — ".join(desc)[:100] or None
+        options = []
+        for idx, d in enumerate(self._page_slice(), 1):
+            to_slug = d.get("location_to")
+            label = slug_to_title(to_slug)
+            desc = []
+            if d.get("is_mainline"):
+                desc.append("Rota principal")
+            if d.get("step") is not None:
+                desc.append(f"Passo {d['step']}")
+            options.append(
+                discord.SelectOption(
+                    label=f"{idx}. {label}",
+                    value=to_slug,
+                    description=" — ".join(desc)[:100] or None
+                )
             )
-        )
 
-    if not options:
-        self._select = None
-        return
+        if not options:
+            self._select = None
+            return
 
-    class DestSelect(discord.ui.Select):
-        def __init__(self, owner: "TravelViewSafe", options_):
-            super().__init__(placeholder="Escolha um destino…", min_values=1, max_values=1, options=options_)
-            self._owner = owner  # <- NÃO use 'parent', conflita com a property do discord.py
+        class DestSelect(discord.ui.Select):
+            def __init__(self, owner: "TravelViewSafe", options_):
+                super().__init__(placeholder="Escolha um destino…", min_values=1, max_values=1, options=options_)
+                self._owner = owner  # não usar 'parent' (colide com property do discord.py)
 
-        async def callback(self, interaction: discord.Interaction):
-            if interaction.user.id != self._owner.player.user_id:
-                return await interaction.response.send_message("Esta viagem não é sua.", ephemeral=True)
-            await interaction.response.defer()
-            chosen = self.values[0]  # slug do destino
-            await self._owner._perform_travel(chosen)
+            async def callback(self, interaction: discord.Interaction):
+                if interaction.user.id != self._owner.player.user_id:
+                    return await interaction.response.send_message("Esta viagem não é sua.", ephemeral=True)
+                await interaction.response.defer()
+                chosen = self.values[0]  # slug do destino
+                await self._owner._perform_travel(chosen)
 
-    self._select = DestSelect(self, options)
-    self.add_item(self._select)
+        self._select = DestSelect(self, options)
+        self.add_item(self._select)
 
-
-    # ------------ render ------------
-
+    # ------------ render (FICOU FALTANDO NA SUA CÓPIA) ------------
     async def _render(self):
         if not self.message:
             return
@@ -236,7 +234,7 @@ def _rebuild_select(self):
             color=discord.Color.blurple(),
         )
 
-        # a imagem já foi anexada no primeiro send; preservamos o mesmo URL
+        # preserva a imagem anexada no primeiro send
         if self._region_img_filename:
             embed.set_image(url=f"attachment://{self._region_img_filename}")
 
