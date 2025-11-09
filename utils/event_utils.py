@@ -1,90 +1,101 @@
 # utils/event_utils.py
+# -*- coding: utf-8 -*-
+
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-# ------------- Gates -------------
+"""
+Utilitários de eventos/rotas apoiados em Supabase.
 
-def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
-    if not gate:
-        return True
-    requires_badge = gate.get("requires_badge")
-    if requires_badge is not None:
-        badges = getattr(player, "badges", 0) or 0
-        if isinstance(badges, (list, tuple, set)):
-            badges = len(badges)
-        if int(badges) < int(requires_badge):
-            return False
-    required_flag = gate.get("flag")
-    if required_flag:
-        flags = set(getattr(player, "flags", []) or [])
-        if required_flag not in flags:
-            return False
-    return True
+Assume as tabelas:
 
-# ------------- Consultas (Supabase) -------------
+- routes(region, location_from, location_to, step, is_mainline, gate)
+- locations(region, location_api_name, type, has_gym, has_shop)
+
+Ajustes importantes:
+- Removemos o uso de `nullsfirst=` nas chamadas .order(...) por compatibilidade.
+- Funções protegem contra erros e retornam listas vazias quando apropriado.
+"""
+
+# ------------- helpers -------------
+
+def _table(client: Any, name: str):
+    # `client` aqui é o supabase.create_client(...)
+    return client.table(name)
+
+# ------------- consultas -------------
 
 async def get_adjacent_routes(
-    supabase,
+    client: Any,
+    *,
     region: str,
     location_from: str,
-    *,
     mainline_only: bool = False,
 ) -> List[Dict]:
+    """
+    Rotas que saem de `location_from`.
+    """
     q = (
-        supabase
-        .table("routes")
-        .select("location_from,location_to,step,is_mainline,gate")
+        _table(client, "routes")
+        .select("region,location_from,location_to,step,is_mainline,gate")
         .eq("region", region)
         .eq("location_from", location_from)
     )
     if mainline_only:
         q = q.eq("is_mainline", True)
-    # Ordenações: step (NULLS LAST) e depois location_to
-    q = q.order("step", nullsfirst=False).order("location_to", nullsfirst=True)
-    res = q.execute()
-    return list(res.data or [])
 
-async def get_next_mainline_edge(supabase, region: str, location_from: str) -> Optional[Dict]:
-    q = (
-        supabase
-        .table("routes")
-        .select("location_from,location_to,step,gate")
-        .eq("region", region)
-        .eq("location_from", location_from)
-        .eq("is_mainline", True)
-        .order("step", nullsfirst=False)
-        .limit(1)
-    )
-    res = q.execute()
-    rows = res.data or []
-    return dict(rows[0]) if rows else None
+    # Compat: não usamos nullsfirst / nullslast aqui.
+    q = q.order("step").order("location_to")
 
-async def get_permitted_destinations(
-    supabase,
-    player: Any,
-    region: str,
-    location_from: str,
+    data = await q.execute()
+    rows = getattr(data, "data", data)
+    return rows or []
+
+async def get_location_info(
+    client: Any,
     *,
-    mainline_only: bool = False,
-) -> List[Tuple[str, Optional[int]]]:
-    edges = await get_adjacent_routes(supabase, region, location_from, mainline_only=mainline_only)
-    allowed: List[Tuple[str, Optional[int]]] = []
-    for e in edges:
-        gate = e.get("gate") or {}
-        if gate_allows(player, gate):
-            allowed.append((e["location_to"], e.get("step")))
-    # ordena: com step primeiro, depois alfa
-    allowed.sort(key=lambda t: (t[1] is None, t[1] or 10**9, t[0]))
-    return allowed
-
-async def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
-    res = (
-        supabase
-        .table("locations")
-        .select("location_api_name,name,type,region,has_gym,has_shop,default_area")
+    region: str,
+    location_api_name: str,
+) -> Optional[Dict]:
+    q = (
+        _table(client, "locations")
+        .select("region,location_api_name,type,has_gym,has_shop")
+        .eq("region", region)
         .eq("location_api_name", location_api_name)
         .limit(1)
-        .execute()
     )
-    rows = res.data or []
-    return dict(rows[0]) if rows else None
+    data = await q.execute()
+    rows = getattr(data, "data", data) or []
+    return rows[0] if rows else None
+
+async def get_permitted_destinations(
+    client: Any,
+    *,
+    region: str,
+    location_from: str,
+    player: Any,
+    mainline_only: bool = False,
+) -> List[Dict]:
+    """
+    Retorna as rotas adjacentes permitidas a partir de `location_from`.
+    Aqui você pode aplicar gates/badges com base no `player`.
+    Por enquanto, apenas retorna as adjacentes; ajuste as regras conforme seu jogo.
+    """
+    routes = await get_adjacent_routes(
+        client,
+        region=region,
+        location_from=location_from,
+        mainline_only=mainline_only,
+    )
+
+    # Exemplo de filtro por gate (se gate existe, e o jogador não tem, bloqueia)
+    def _allowed(route: Dict) -> bool:
+        gate = route.get("gate")
+        if not gate:
+            return True
+        # adapte conforme seu modelo de player (badges, flags, etc.)
+        player_gates = set(getattr(player, "gates", []) or [])
+        return gate in player_gates
+
+    permitted = [r for r in routes if _allowed(r)]
+    return permitted
