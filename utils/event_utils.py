@@ -68,8 +68,8 @@ async def get_adjacent_routes(
         supabase
         .table("routes")
         .select("location_from,location_to,step,is_mainline,gate")
-        .eq("region", region)
-        .eq("location_from", location_from)
+        .ilike("region", region)
+        .ilike("location_from", location_from)
     )
     if mainline_only:
         q = q.eq("is_mainline", True)
