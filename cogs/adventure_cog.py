@@ -18,105 +18,89 @@ def slug_to_title(slug: str) -> str:
 
 
 class TravelViewSafe(discord.ui.View):
-    """
-    View segura para o fluxo de viagem.
-    - Sempre envia um embed imediatamente (feedback ao usuário)
-    - Carrega destinos de forma resiliente (try/except)
-    """
-    def __init__(
-        self,
-        bot: commands.Bot,
-        supabase: Any,
-        player: "PlayerAdapter",
-        mainline_only: bool = False,
-        timeout: Optional[float] = 120.0,
-    ) -> None:
-        super().__init__(timeout=timeout)
-        self.bot = bot
-        self.supabase = supabase
-        self.player = player
-        self.mainline_only = mainline_only
-
-        self.message: Optional[discord.Message] = None
-        self.page: int = 0
-        self._dest_cache: List[dict] = []
-
-    # ------------ lifecycle ------------
-
-    async def start(self, ctx: commands.Context):
-        # 1) Mostra algo na tela imediatamente
-        embed = discord.Embed(
-            title=f"🧭 Viagem — {slug_to_title(self.player.location_api_name)}",
-            description="Carregando destinos...",
-            color=discord.Color.blurple(),
-        )
-        self.message = await ctx.send(embed=embed, view=self)
-
-        # 2) Tenta carregar e renderizar
-        try:
-            await self._reload_destinations()
-            await self._render()
-        except Exception as e:
-            print(f"[TravelViewSafe:start][ERROR] {e}", flush=True)
-            await self._show_error(e)
-
-    async def _show_error(self, e: Exception):
-        if not self.message:
-            return
-        err = discord.Embed(
-            title="🧭 Viagem — Falha ao carregar",
-            description=f"Houve um erro ao consultar os destinos.\n```{e}```",
-            color=discord.Color.red(),
-        )
-        try:
-            await self.message.edit(embed=err, view=None)
-        except discord.HTTPException:
-            pass
+    ...
+    _select: Optional[discord.ui.Select] = None  # <- add
 
     # ------------ dados ------------
-
     async def _reload_destinations(self):
-        """
-        IMPORTANTE: event_utils usa cliente síncrono, então NÃO usar await.
-        """
-        try:
-            print(
-                "[TravelViewSafe:_reload_destinations:BEGIN]",
-                "region=", self.player.region,
-                "from=", self.player.location_api_name,
-                "mainline_only=", self.mainline_only,
-                flush=True,
-            )
-            # chamada síncrona:
-            self._dest_cache = event_utils.get_permitted_destinations(
-                self.supabase,
-                region=self.player.region,
-                location_from=self.player.location_api_name,
-                player=self.player,
-                mainline_only=self.mainline_only,
-            )
-            print(
-                "[TravelViewSafe:_reload_destinations:END]",
-                "type=", type(self._dest_cache),
-                "len=", len(self._dest_cache),
-                "sample=", self._dest_cache[:2],
-                flush=True,
-            )
-        except Exception as e:
-            print(f"[TravelViewSafe:_reload_destinations][ERROR] {e}", flush=True)
-            # Se algo der errado, não quebra a view inteira
-            self._dest_cache = []
-
+        ...
+        # calcula paginação como já estava
         max_page = max(0, (max(len(self._dest_cache), 1) - 1) // MAX_DEST_PER_PAGE)
         self.page = max(0, min(self.page, max_page))
 
-    # ------------ UI helpers ------------
-
+    # ------------ helpers novos ------------
     def _page_slice(self) -> List[dict]:
         i0 = self.page * MAX_DEST_PER_PAGE
         i1 = i0 + MAX_DEST_PER_PAGE
         return self._dest_cache[i0:i1]
 
+    async def _perform_travel(self, to_slug: str):
+        """Atualiza a location no Supabase e recarrega a view já no novo lugar."""
+        try:
+            # atualiza no BD
+            (
+                self.supabase.table("players")
+                .update({"current_location_name": to_slug})
+                .eq("discord_id", self.player.user_id)
+                .execute()
+            )
+            # atualiza o adapter em memória
+            self.player.location_api_name = to_slug
+
+            # feedback rápido
+            await self.message.channel.send(
+                f"✈️ Viajando para **{slug_to_title(to_slug)}**..."
+            )
+
+            # recarrega destinos já no novo local
+            await self._reload_destinations()
+            await self._render()
+        except Exception as e:
+            await self.message.channel.send(f"Não consegui viajar agora: `{e}`")
+
+    def _rebuild_select(self):
+        """Reconstrói o Select com as opções da página atual."""
+        # remove select anterior (se existir)
+        if self._select and self._select in self.children:
+            self.remove_item(self._select)
+
+        options = []
+        for idx, d in enumerate(self._page_slice(), 1):
+            to_slug = d.get("location_to")
+            label = slug_to_title(to_slug)
+            desc = []
+            if d.get("is_mainline"):
+                desc.append("Rota principal")
+            if d.get("step") is not None:
+                desc.append(f"Passo {d['step']}")
+            options.append(
+                discord.SelectOption(
+                    label=f"{idx}. {label}",
+                    value=to_slug,
+                    description=" — ".join(desc)[:100] or None
+                )
+            )
+
+        if not options:
+            self._select = None
+            return
+
+        class DestSelect(discord.ui.Select):
+            def __init__(self, parent: "TravelViewSafe", options_):
+                super().__init__(placeholder="Escolha um destino…", min_values=1, max_values=1, options=options_)
+                self.parent = parent
+
+            async def callback(self, interaction: discord.Interaction):
+                if interaction.user.id != self.parent.player.user_id:
+                    return await interaction.response.send_message("Esta viagem não é sua.", ephemeral=True)
+                await interaction.response.defer()
+                chosen = self.values[0]  # slug do destino
+                await self.parent._perform_travel(chosen)
+
+        self._select = DestSelect(self, options)
+        self.add_item(self._select)
+
+    # ------------ render ------------
     async def _render(self):
         if not self.message:
             return
@@ -128,17 +112,17 @@ class TravelViewSafe(discord.ui.View):
         else:
             lines = []
             for idx, d in enumerate(self._page_slice(), 1):
-                try:
-                    to_name = slug_to_title(d.get("location_to"))
-                    step = d.get("step")
-                    gate = d.get("gate")
-                    badge = " (rota principal)" if d.get("is_mainline") else ""
-                    gate_txt = f" — gate: `{gate}`" if gate else ""
-                    step_txt = f" — passo {step}" if step is not None else ""
-                    lines.append(f"**{idx}.** {to_name}{badge}{step_txt}{gate_txt}")
-                except Exception as e:
-                    print(f"[TravelViewSafe:_render][ERROR item] {e} d={d}", flush=True)
+                to_name = slug_to_title(d.get("location_to"))
+                step = d.get("step")
+                gate = d.get("gate")
+                badge = " (rota principal)" if d.get("is_mainline") else ""
+                gate_txt = f" — gate: `{gate}`" if gate else ""
+                step_txt = f" — passo {step}" if step is not None else ""
+                lines.append(f"**{idx}.** {to_name}{badge}{step_txt}{gate_txt}")
             desc = "\n".join(lines)
+
+        # (RE)constrói o select para a página atual
+        self._rebuild_select()
 
         total_pages = max(1, math.ceil(len(self._dest_cache) / MAX_DEST_PER_PAGE))
         embed = discord.Embed(
@@ -149,24 +133,6 @@ class TravelViewSafe(discord.ui.View):
         embed.set_footer(text=f"Página {self.page + 1} / {total_pages}")
         await self.message.edit(embed=embed, view=self)
 
-    # ------------ botões ------------
-
-    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
-    async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.player.user_id:
-            return await interaction.response.send_message("Esta viagem não é sua.", ephemeral=True)
-        self.page = max(0, self.page - 1)
-        await interaction.response.defer()
-        await self._render()
-
-    @discord.ui.button(label="➡️", style=discord.ButtonStyle.secondary)
-    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.player.user_id:
-            return await interaction.response.send_message("Esta viagem não é sua.", ephemeral=True)
-        max_page = max(0, (max(len(self._dest_cache), 1) - 1) // MAX_DEST_PER_PAGE)
-        self.page = min(max_page, self.page + 1)
-        await interaction.response.defer()
-        await self._render()
 
 
 # -----------------------
