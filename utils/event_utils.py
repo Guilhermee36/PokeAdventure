@@ -3,15 +3,14 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 import json
 
-# ------------- Gates -------------
+# ==============================================================
+#  🔒 GATES (regras para travas de acesso)
+# ==============================================================
 
 def _coerce_gate(gate_val: Any) -> Dict:
     """
-    Converte o valor de 'gate' para dict:
-    - {} -> {}
-    - '{"requires_badge": 3}' -> {"requires_badge": 3}
-    - None / "" -> {}
-    - Qualquer outra coisa inválida -> {}
+    Converte o valor de 'gate' em dict.
+    Aceita {}, string JSON, None, etc.
     """
     if not gate_val:
         return {}
@@ -26,14 +25,20 @@ def _coerce_gate(gate_val: Any) -> Dict:
             return parsed if isinstance(parsed, dict) else {}
         except Exception:
             return {}
-    # tipos inesperados
     return {}
 
 def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
+    """
+    Retorna True se o jogador atende às condições do gate.
+    Suporta:
+      - requires_badge
+      - requires_flags
+    """
     gate = _coerce_gate(gate)
     if not gate:
         return True
 
+    # Requer um número mínimo de insígnias
     requires_badge = gate.get("requires_badge")
     if requires_badge is not None:
         badges = getattr(player, "badges", 0) or 0
@@ -42,6 +47,7 @@ def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
         if int(badges) < int(requires_badge):
             return False
 
+    # Requer certas flags de história
     required_flags = gate.get("requires_flags")
     if required_flags:
         have = set(getattr(player, "flags", []) or [])
@@ -49,12 +55,14 @@ def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
         if not need.issubset(have):
             return False
 
-    # adicione outras regras de gate aqui (itens, story_flags, etc.)
     return True
 
-# ------------- Consultas -------------
 
-async def get_adjacent_routes(
+# ==============================================================
+#  🗺️ Consultas de local e rotas
+# ==============================================================
+
+def get_adjacent_routes(
     supabase,
     region: str,
     location_from: str,
@@ -62,79 +70,100 @@ async def get_adjacent_routes(
     mainline_only: bool = False,
 ) -> List[Dict]:
     """
-    Busca as arestas a partir de `location_from` na região dada.
+    Retorna todas as rotas conectadas a `location_from` na região dada.
+    Compatível com Supabase Python síncrono.
     """
-    q = (
-        supabase
-        .table("routes")
-        .select("location_from,location_to,step,is_mainline,gate")
-        .ilike("region", region)
-        .ilike("location_from", location_from)
-    )
-    if mainline_only:
-        q = q.eq("is_mainline", True)
+    try:
+        q = (
+            supabase.table("routes")
+            .select("location_from,location_to,step,is_mainline,gate")
+            .ilike("region", region)
+            .ilike("location_from", location_from)
+        )
+        if mainline_only:
+            q = q.eq("is_mainline", True)
 
-    # Compat: sem 'nullsfirst', que pode não ser aceito por alguns clients.
-    q = q.order("step").order("location_to")
+        q = q.order("step").order("location_to")
+        res = q.execute()
+        return list(res.data or [])
+    except Exception as e:
+        print(f"[event_utils] Erro em get_adjacent_routes: {e}")
+        return []
 
-    res = q.execute()
-    return list(res.data or [])
 
-async def get_next_mainline_edge(
+def get_next_mainline_edge(
     supabase,
     region: str,
     location_from: str
 ) -> Optional[Dict]:
     """
-    Próxima aresta da linha principal a partir de `location_from`.
+    Retorna a próxima rota principal a partir de `location_from`.
     """
-    q = (
-        supabase
-        .table("routes")
-        .select("location_from,location_to,step,gate")
-        .eq("region", region)
-        .eq("location_from", location_from)
-        .eq("is_mainline", True)
-        .order("step")     # sem nullsfirst
-        .limit(1)
-    )
-    res = q.execute()
-    rows = res.data or []
-    return dict(rows[0]) if rows else None
+    try:
+        q = (
+            supabase
+            .table("routes")
+            .select("location_from,location_to,step,gate")
+            .eq("region", region)
+            .eq("location_from", location_from)
+            .eq("is_mainline", True)
+            .order("step")
+            .limit(1)
+        )
+        res = q.execute()
+        rows = res.data or []
+        return dict(rows[0]) if rows else None
+    except Exception as e:
+        print(f"[event_utils] Erro em get_next_mainline_edge: {e}")
+        return None
 
-async def get_permitted_destinations(
+
+def get_permitted_destinations(
     supabase,
     player: Any,
     region: str,
     location_from: str,
     *,
     mainline_only: bool = False,
-) -> List[Tuple[str, Optional[int]]]:
+) -> List[Dict]:
     """
-    Filtra as arestas adjacentes por 'gate' e devolve (location_to, step).
+    Filtra as rotas adjacentes por 'gate' e retorna destinos liberados.
+    Retorna lista de dicts no formato:
+        { "location_to": str, "step": int | None, "is_mainline": bool, "gate": dict }
     """
-    edges = await get_adjacent_routes(
-        supabase, region, location_from, mainline_only=mainline_only
-    )
+    edges = get_adjacent_routes(supabase, region, location_from, mainline_only=mainline_only)
 
-    allowed: List[Tuple[str, Optional[int]]] = []
+    allowed: List[Dict] = []
     for e in edges:
         gate = _coerce_gate(e.get("gate"))
         if gate_allows(player, gate):
-            allowed.append((e["location_to"], e.get("step")))
+            allowed.append({
+                "location_to": e["location_to"],
+                "step": e.get("step"),
+                "is_mainline": e.get("is_mainline", False),
+                "gate": gate
+            })
 
-    # Ordena: com passo definido primeiro (crescente), depois alfabético.
-    allowed.sort(key=lambda t: (t[1] is None, t[1] or 10**9, t[0]))
+    # Ordena por passo (se existir), depois alfabético
+    allowed.sort(key=lambda t: (t["step"] is None, t["step"] or 10**9, t["location_to"]))
     return allowed
 
-async def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
-    res = (
-        supabase
-        .table("locations")
-        .select("location_api_name,name,type,region,has_gym,has_shop,default_area")
-        .eq("location_api_name", location_api_name)
-        .limit(1)
-        .execute()
-    )
-    rows = res.data or []
-    return dict(rows[0]) if rows else None
+
+def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
+    """
+    Retorna informações básicas de uma location.
+    """
+    try:
+        res = (
+            supabase
+            .table("locations")
+            .select("location_api_name,name,type,region,has_gym,has_shop,default_area")
+            .eq("location_api_name", location_api_name)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        return dict(rows[0]) if rows else None
+    except Exception as e:
+        print(f"[event_utils] Erro em get_location_info: {e}")
+        return None
