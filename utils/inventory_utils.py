@@ -3,7 +3,7 @@
 from __future__ import annotations
 from supabase import Client
 
-PLAYER_ITEMS_TABLE = "player_items"     # player_id, item_id, quantity
+PLAYER_ITEMS_TABLE = "player_inventory"     # player_id, item_id, quantity
 ITEMS_TABLE = "items"                   # id, name
 POKEBALL_NAME = "Pokeball"              # conforme sua tabela items (seed usa "Pokeball")
 POKEBALL_ALIASES = ["Pokeball", "pokeball", "Poke ball", "poke ball", "Poké ball", "poké ball"]
