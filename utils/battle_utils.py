@@ -5,8 +5,7 @@ from typing import List, Tuple, Optional, Dict
 import math
 import random
 
-# Tipagem simplificada (chart fixo) — multiplicadores de efetividade
-# Ex.: TYPE_CHART[atk_type][def_type] -> mult
+# --- Tabela de efetividade (simplificada e suficiente p/ v1) ---
 TYPE_CHART: Dict[str, Dict[str, float]] = {
     "normal":  {"rock": 0.5, "ghost": 0.0, "steel": 0.5},
     "fire":    {"fire": 0.5, "water": 0.5, "grass": 2.0, "ice": 2.0, "bug": 2.0, "rock": 0.5, "dragon": 0.5, "steel": 2.0},
@@ -60,7 +59,7 @@ def calc_damage(
     defender_types: List[str],
     rng: random.Random,
 ) -> Tuple[int, float, bool]:
-    """Retorna (dano, efetividade, stab_aplicado)"""
+    """Retorna (dano, efetividade, stab_aplicado)."""
     if power <= 0:
         return 0, 1.0, False
     base = math.floor((((2 * level) / 5) + 2) * power * (atk / max(1, deff)) / 50) + 2
@@ -81,19 +80,19 @@ def capture_chance(
     ball_mult: float = 1.0,
     status_mult: float = 1.0,
 ) -> float:
-    """Aproximação simples e divertida (0..1)."""
+    """Aproximação simples (0..1) que melhora com HP baixo."""
     if wild_max_hp <= 0:
         return 1.0
     hp_factor = ((3 * wild_max_hp) - (2 * max(0, wild_current_hp))) / (3 * wild_max_hp)
     hp_factor = max(0.01, min(1.0, hp_factor))
-    base = base_capture_rate / 255.0
+    base = (base_capture_rate or 0) / 255.0
     chance = base * ball_mult * status_mult * hp_factor
     return max(0.01, min(0.95, chance))
 
 def attempt_capture(rng: random.Random, chance: float) -> bool:
     return rng.random() < max(0.0, min(1.0, chance))
 
-# --------- HP bar textual ---------
+# --------- Barra de HP textual ---------
 
 def hp_bar(current: int, maximum: int, width_blocks: int = 10) -> Tuple[str, str]:
     if maximum <= 0:
