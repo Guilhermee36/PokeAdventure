@@ -8,27 +8,13 @@ import discord
 from discord.ext import commands
 
 # utils do projeto (usa Supabase síncrono)
-from utils import event_utils  # get_permitted_destinations, get_location_info, get_next_mainline_edge
+from utils import event_utils  # get_permitted_destinations, get_location_info, get_next_mainline_edge, next_gym_info, get_gym_order
 
 MAX_DEST_PER_PAGE = 6
 
 
 def slug_to_title(slug: str) -> str:
     return slug.replace("-", " ").title() if slug else "—"
-
-
-# Ordem canônica dos ginásios de Kanto — FireRed/LeafGreen
-# badge_no é 1..8
-GYM_ORDER_KANTO: List[Dict[str, object]] = [
-    {"city": "pewter-city",    "leader": "Brock",      "badge_no": 1, "badge_name": "Boulder Badge"},
-    {"city": "cerulean-city",  "leader": "Misty",      "badge_no": 2, "badge_name": "Cascade Badge"},
-    {"city": "vermilion-city", "leader": "Lt. Surge",  "badge_no": 3, "badge_name": "Thunder Badge"},
-    {"city": "celadon-city",   "leader": "Erika",      "badge_no": 4, "badge_name": "Rainbow Badge"},
-    {"city": "fuchsia-city",   "leader": "Koga",       "badge_no": 5, "badge_name": "Soul Badge"},
-    {"city": "saffron-city",   "leader": "Sabrina",    "badge_no": 6, "badge_name": "Marsh Badge"},
-    {"city": "cinnabar-island","leader": "Blaine",     "badge_no": 7, "badge_name": "Volcano Badge"},
-    {"city": "viridian-city",  "leader": "Giovanni",   "badge_no": 8, "badge_name": "Earth Badge"},
-]
 
 
 class TravelViewSafe(discord.ui.View):
@@ -38,6 +24,7 @@ class TravelViewSafe(discord.ui.View):
     - Select para viajar
     - Botões contextuais (curar, wild, pesca, surf)
     - 🏆 Botão de Líder do Ginásio (se a cidade tiver ginásio)
+    - 🏅 Botão de Insígnias (atualiza/mostra contagem e ganha em vitória)
     - ❓ Help Travel (próximo ginásio + todos os passos)
     - Imagem por região em assets/Regions/<Região>.webp
     """
@@ -71,10 +58,14 @@ class TravelViewSafe(discord.ui.View):
         # novos botões
         self._btn_gym: Optional[discord.ui.Button] = None
         self._btn_help: Optional[discord.ui.Button] = None
+        self._btn_badges: Optional[discord.ui.Button] = None
 
     # ------------ lifecycle ------------
 
     async def start(self, ctx: commands.Context):
+        # Refresca dados do player (região, localização, badges e flags) do BD
+        await self._refresh_player_from_db(ctx.author.id)
+
         # imagem por região no primeiro envio
         region_name = (self.player.region or "Kanto").strip()
         img_path = os.path.join("assets", "Regions", f"{region_name}.webp")
@@ -103,6 +94,26 @@ class TravelViewSafe(discord.ui.View):
         except Exception as e:
             print(f"[TravelViewSafe:start][ERROR] {e}", flush=True)
             await self._show_error(e)
+
+    async def _refresh_player_from_db(self, discord_id: int):
+        """Carrega badges/flags/region/location do BD para refletir os gates corretamente."""
+        try:
+            res = (
+                self.supabase.table("players")
+                .select("current_region,current_location_name,badges,flags")
+                .eq("discord_id", discord_id)
+                .limit(1)
+                .execute()
+            )
+            rows = res.data or []
+            if rows:
+                row = rows[0]
+                self.player.region = row.get("current_region", self.player.region)
+                self.player.location_api_name = row.get("current_location_name", self.player.location_api_name)
+                self.player.badges = row.get("badges", 0) or 0
+                self.player.flags = row.get("flags", []) or []
+        except Exception as e:
+            print(f"[TravelViewSafe:_refresh_player_from_db][WARN] {e}", flush=True)
 
     async def _show_error(self, e: Exception):
         if not self.message:
@@ -166,16 +177,13 @@ class TravelViewSafe(discord.ui.View):
 
     async def _perform_travel(self, to_slug: str):
         try:
-            # Atualiza BD
             (
                 self.supabase.table("players")
                 .update({"current_location_name": to_slug})
                 .eq("discord_id", self.player.user_id)
                 .execute()
             )
-            # Atualiza memória
             self.player.location_api_name = to_slug
-
             await self.message.channel.send(f"✈️ Viajando para **{slug_to_title(to_slug)}**.")
 
             await self._reload_destinations()
@@ -184,45 +192,49 @@ class TravelViewSafe(discord.ui.View):
             print(f"[TravelViewSafe:_perform_travel][ERROR] {e}", flush=True)
             await self.message.channel.send(f"Não consegui viajar agora: `{e}`")
 
-    # ------------ features novas (gym/help) ------------
+    # ------------ features novas (gyms/badges/help) ------------
 
     def _has_gym_here(self) -> bool:
         """Retorna True se a location atual (cidade) tem ginásio."""
         loc = self._loc_info or {}
         return bool(loc.get("has_gym")) and (loc.get("type", "").lower() == "city")
 
-    def _get_next_gym_info(self) -> Optional[Dict[str, object]]:
-        """
-        Devolve dict com info do próximo ginásio baseado no número de insígnias do player.
-        Se badges >= 8, devolve None.
-        """
-        current_badges = getattr(self.player, "badges", 0) or 0
+    def _current_badges_int(self) -> int:
+        b = getattr(self.player, "badges", 0) or 0
+        if isinstance(b, (list, tuple, set)):
+            return len(b)
         try:
-            current_badges = int(current_badges)
+            return int(b)
         except Exception:
-            # se for lista/set, usa o tamanho
-            if isinstance(current_badges, (list, tuple, set)):
-                current_badges = len(current_badges)
-            else:
-                current_badges = 0
+            return 0
 
-        next_badge_no = current_badges + 1
-        for g in GYM_ORDER_KANTO:
-            if int(g["badge_no"]) == next_badge_no:
-                return g  # type: ignore[return-value]
-        return None
+    def _get_next_gym_info(self) -> Optional[Dict[str, object]]:
+        """Próximo ginásio baseado na região e no número de insígnias do player."""
+        return event_utils.next_gym_info(self.player.region, self._current_badges_int())
+
+    async def _increment_badge(self):
+        """Incrementa a contagem de insígnias no BD e na memória."""
+        new_val = self._current_badges_int() + 1
+        if new_val > 8:
+            new_val = 8
+        try:
+            (
+                self.supabase.table("players")
+                .update({"badges": new_val})
+                .eq("discord_id", self.player.user_id)
+                .execute()
+            )
+            self.player.badges = new_val
+        except Exception as e:
+            print(f"[TravelViewSafe:_increment_badge][ERROR] {e}", flush=True)
 
     async def _send_next_gym_hint(self):
-        """
-        Envia dica do próximo ginásio (líder, cidade, número da insígnia e passo mais próximo).
-        Busca na rota principal o primeiro 'step' que leva para essa cidade.
-        """
+        """Dica do próximo ginásio (líder, cidade, badge #) + passo mais próximo na mainline."""
         g = self._get_next_gym_info()
         if not g:
-            await self.message.channel.send("🏆 Você já tem todas as 8 insígnias de Kanto. Rumo à Liga!")
+            await self.message.channel.send("🏆 Você já concluiu os ginásios desta região (ou ela não possui ginásios).")
             return
 
-        # encontra o menor step que leve até a cidade alvo (na trilha principal)
         step_txt = ""
         try:
             res = (
@@ -247,10 +259,7 @@ class TravelViewSafe(discord.ui.View):
         )
 
     async def _send_all_mainline_steps(self):
-        """
-        Envia uma lista ordenada (passo -> destino) da trilha principal,
-        para o treinador não se perder.
-        """
+        """Lista ordenada (passo -> destino) da trilha principal da região atual."""
         try:
             res = (
                 self.supabase.table("routes")
@@ -266,12 +275,11 @@ class TravelViewSafe(discord.ui.View):
                 await self.message.channel.send("Não encontrei passos principais cadastrados.")
                 return
 
-            # lista enxuta: "Passo N — Destino"
             lines = []
             for r in rows:
                 to_name = slug_to_title(r.get("location_to"))
                 lines.append(f"**Passo {int(r['step'])}** — {to_name}")
-            text = "\n".join(lines[:100])  # proteção: evita estourar embed/limite
+            text = "\n".join(lines[:100])
             embed = discord.Embed(
                 title="\U0001F9FE\uFE0F  Todos os Passos da História (Mainline)",
                 description=text,
@@ -322,11 +330,11 @@ class TravelViewSafe(discord.ui.View):
 
     def _rebuild_action_buttons(self):
         # limpa botões antigos
-        for b in [self._btn_heal, self._btn_wild, self._btn_fish, self._btn_surf, self._btn_gym, self._btn_help]:
+        for b in [self._btn_heal, self._btn_wild, self._btn_fish, self._btn_surf, self._btn_gym, self._btn_help, self._btn_badges]:
             if b and b in self.children:
                 self.remove_item(b)
         self._btn_heal = self._btn_wild = self._btn_fish = self._btn_surf = None
-        self._btn_gym = self._btn_help = None
+        self._btn_gym = self._btn_help = self._btn_badges = None
 
         # decide o que habilitar
         loc = self._loc_info or {}
@@ -386,14 +394,34 @@ class TravelViewSafe(discord.ui.View):
             self._btn_surf.callback = surf_cb
             self.add_item(self._btn_surf)
 
+        # === 🏅 Botão de Insígnias (sempre visível; atualiza label/estado) ===
+        badges_label = f"🏅 Insígnias: {self._current_badges_int()}/8"
+        self._btn_badges = discord.ui.Button(label=badges_label, style=discord.ButtonStyle.secondary)
+
+        async def badges_cb(inter: discord.Interaction):
+            if inter.user.id != self.player.user_id:
+                return await inter.response.send_message("Ação não é sua.", ephemeral=True)
+            # Recarrega do BD e atualiza a label (requisito 1)
+            await inter.response.defer()
+            await self._refresh_player_from_db(self.player.user_id)
+            # Re-render apenas os botões para atualizar a label
+            self._rebuild_action_buttons()
+            try:
+                await self.message.edit(view=self)
+            except Exception:
+                pass
+            await self.message.channel.send(f"🏅 Você tem **{self._current_badges_int()}** insígnias.")
+        self._btn_badges.callback = badges_cb
+        self.add_item(self._btn_badges)
+
         # === 🏆 Botão do Líder do Ginásio (só em cidades com ginásio) ===
         if has_gym_here:
-            # resolve info do líder baseado na cidade atual
             city_slug = (loc.get("location_api_name") or self.player.location_api_name)
+            # resolve info do líder baseado NA REGIÃO
             leader = None
             badge_no = None
             badge_name = None
-            for g in GYM_ORDER_KANTO:
+            for g in event_utils.get_gym_order(self.player.region):
                 if g["city"] == city_slug:
                     leader, badge_no, badge_name = g["leader"], g["badge_no"], g["badge_name"]
                     break
@@ -405,13 +433,30 @@ class TravelViewSafe(discord.ui.View):
                 if inter.user.id != self.player.user_id:
                     return await inter.response.send_message("Ação não é sua.", ephemeral=True)
                 await inter.response.defer()
-                if leader:
-                    await self.message.channel.send(
-                        f"🏆 Você desafia **{leader}** em **{slug_to_title(str(city_slug))}** "
-                        f"(Insígnia {badge_no}: {badge_name}). (placeholder de batalha)"
+
+                # Verifica se esta cidade é o PRÓXIMO ginásio esperado
+                next_g = self._get_next_gym_info()
+                if not next_g:
+                    return await self.message.channel.send("Esta região não possui ginásios ou você já tem 8 insígnias.")
+
+                if str(next_g["city"]) != str(city_slug):
+                    return await self.message.channel.send(
+                        f"⚠️ O próximo ginásio esperado é **{next_g['leader']}** em **{slug_to_title(str(next_g['city']))}**."
                     )
-                else:
-                    await self.message.channel.send("Esta cidade não tem líder mapeado ainda.")
+
+                # Placeholder de batalha → vitória garante insígnia
+                await self.message.channel.send(
+                    f"🏆 Você desafia **{leader or 'o Líder'}** em **{slug_to_title(str(city_slug))}** "
+                    f"(Insígnia {badge_no}: {badge_name})."
+                )
+                # Concede 1 insígnia
+                await self._increment_badge()
+                # Atualiza destinos (para liberar gates de 8 insignias) e UI (requisito 2)
+                await self._reload_destinations()
+                self._rebuild_action_buttons()
+                await self._render()
+                await self.message.channel.send(f"✅ Você agora tem **{self._current_badges_int()}** insígnias!")
+
             self._btn_gym.callback = gym_cb
             self.add_item(self._btn_gym)
 
@@ -420,7 +465,6 @@ class TravelViewSafe(discord.ui.View):
         async def help_cb(inter: discord.Interaction):
             if inter.user.id != self.player.user_id:
                 return await inter.response.send_message("Ação não é sua.", ephemeral=True)
-            # mini-menu com 2 botões
             view = discord.ui.View(timeout=60)
 
             btn_next_gym = discord.ui.Button(label="👉 Próximo Ginásio", style=discord.ButtonStyle.primary)
@@ -470,11 +514,16 @@ class TravelViewSafe(discord.ui.View):
                 step = d.get("step")
                 principal = (step is not None)
                 prefix = "🧭" if principal else "🗺️"
-                info = f"— **Passo {step}**" if principal else "— Opcional"
+                # (requisito 2) Se tiver gate, mostra um lembrete
+                gate = d.get("gate") or {}
+                gate_txt = ""
+                rb = (gate or {}).get("requires_badge")
+                if rb:
+                    gate_txt = f" · Gate: {rb}🏅"
+                info = f"— **Passo {step}**{gate_txt}" if principal else f"— Opcional{gate_txt}"
                 lines.append(f"**{idx}. {prefix} {to_name}** {info}")
             desc = "\n".join(lines)
 
-        # monta o embed e elementos
         embed = discord.Embed(
             title=f"\U0001F9ED Viagem — {current_loc_title}",
             description=desc or "—",
@@ -526,11 +575,12 @@ class AdventureCog(commands.Cog):
         Abre o menu de viagem para a location atual do jogador.
         Integra com a tabela players:
           - atualiza current_location_name ao viajar
+          - lê badges/flags para respeitar gates (8 insígnias, etc.)
         """
         # >>> Substitua por seu mecanismo real de player (fetch do BD) <<<
         player = getattr(ctx, "player", None)
         if player is None:
-            # fallback: cria adaptador mínimo (spawn Pallet/Kanto)
+            # fallback: cria adaptador mínimo
             player = PlayerAdapter(
                 user_id=ctx.author.id,
                 region="Kanto",

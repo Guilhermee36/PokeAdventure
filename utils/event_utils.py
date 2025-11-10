@@ -1,4 +1,3 @@
-# utils/event_utils.py
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import json
@@ -59,6 +58,115 @@ def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
 
 
 # ==============================================================
+#  🧭 ORDENS DE GINÁSIOS (todas as regiões)
+# ==============================================================
+
+# Cada item: {"city": <slug da cidade>, "leader": "Nome", "badge_no": 1..8, "badge_name": "... Badge"}
+# Usei a ordem canônica por jogo. Se alguma cidade não existir no seu DB, o botão de ginásio não aparecerá nela.
+GYM_ORDERS: Dict[str, List[Dict[str, object]]] = {
+    "Kanto": [
+        {"city": "pewter-city",    "leader": "Brock",      "badge_no": 1, "badge_name": "Boulder Badge"},
+        {"city": "cerulean-city",  "leader": "Misty",      "badge_no": 2, "badge_name": "Cascade Badge"},
+        {"city": "vermilion-city", "leader": "Lt. Surge",  "badge_no": 3, "badge_name": "Thunder Badge"},
+        {"city": "celadon-city",   "leader": "Erika",      "badge_no": 4, "badge_name": "Rainbow Badge"},
+        {"city": "fuchsia-city",   "leader": "Koga",       "badge_no": 5, "badge_name": "Soul Badge"},
+        {"city": "saffron-city",   "leader": "Sabrina",    "badge_no":  6, "badge_name": "Marsh Badge"},
+        {"city": "cinnabar-island","leader": "Blaine",     "badge_no": 7, "badge_name": "Volcano Badge"},
+        {"city": "viridian-city",  "leader": "Giovanni",   "badge_no": 8, "badge_name": "Earth Badge"},
+    ],
+    "Johto": [
+        {"city": "violet-city",    "leader": "Falkner",    "badge_no": 1, "badge_name": "Zephyr Badge"},
+        {"city": "azalea-town",    "leader": "Bugsy",      "badge_no": 2, "badge_name": "Hive Badge"},
+        {"city": "goldenrod-city", "leader": "Whitney",    "badge_no": 3, "badge_name": "Plain Badge"},
+        {"city": "ecruteak-city",  "leader": "Morty",      "badge_no": 4, "badge_name": "Fog Badge"},
+        {"city": "cianwood-city",  "leader": "Chuck",      "badge_no": 5, "badge_name": "Storm Badge"},
+        {"city": "olivine-city",   "leader": "Jasmine",    "badge_no": 6, "badge_name": "Mineral Badge"},
+        {"city": "mahogany-town",  "leader": "Pryce",      "badge_no": 7, "badge_name": "Glacier Badge"},
+        {"city": "blackthorn-city","leader": "Clair",      "badge_no": 8, "badge_name": "Rising Badge"},
+    ],
+    "Hoenn": [
+        {"city": "rustboro-city",  "leader": "Roxanne",    "badge_no": 1, "badge_name": "Stone Badge"},
+        {"city": "dewford-town",   "leader": "Brawly",     "badge_no": 2, "badge_name": "Knuckle Badge"},
+        {"city": "mauville-city",  "leader": "Wattson",    "badge_no": 3, "badge_name": "Dynamo Badge"},
+        {"city": "lavaridge-town", "leader": "Flannery",   "badge_no": 4, "badge_name": "Heat Badge"},
+        {"city": "petalburg-city", "leader": "Norman",     "badge_no": 5, "badge_name": "Balance Badge"},
+        {"city": "fortree-city",   "leader": "Winona",     "badge_no": 6, "badge_name": "Feather Badge"},
+        {"city": "mossdeep-city",  "leader": "Tate & Liza","badge_no": 7, "badge_name": "Mind Badge"},
+        {"city": "sootopolis-city","leader": "Wallace",    "badge_no": 8, "badge_name": "Rain Badge"},
+    ],
+    "Sinnoh": [
+        {"city": "oreburgh-city",  "leader": "Roark",      "badge_no": 1, "badge_name": "Coal Badge"},
+        {"city": "eterna-city",    "leader": "Gardenia",   "badge_no": 2, "badge_name": "Forest Badge"},
+        {"city": "hearthome-city", "leader": "Fantina",    "badge_no": 3, "badge_name": "Relic Badge"},
+        {"city": "veilstone-city", "leader": "Maylene",    "badge_no": 4, "badge_name": "Cobble Badge"},
+        {"city": "pastoria-city",  "leader": "Crasher Wake","badge_no": 5,"badge_name": "Fen Badge"},
+        {"city": "canalave-city",  "leader": "Byron",      "badge_no": 6, "badge_name": "Mine Badge"},
+        {"city": "snowpoint-city", "leader": "Candice",    "badge_no": 7, "badge_name": "Icicle Badge"},
+        {"city": "sunnyshore-city","leader": "Volkner",    "badge_no": 8, "badge_name": "Beacon Badge"},
+    ],
+    "Unova": [
+        {"city": "striaton-city",  "leader": "Cilan/Chili/Cress","badge_no": 1, "badge_name": "Trio Badge"},
+        {"city": "nacrene-city",   "leader": "Lenora",     "badge_no": 2, "badge_name": "Basic Badge"},
+        {"city": "castelia-city",  "leader": "Burgh",      "badge_no": 3, "badge_name": "Insect Badge"},
+        {"city": "nimbasa-city",   "leader": "Elesa",      "badge_no": 4, "badge_name": "Bolt Badge"},
+        {"city": "driftveil-city", "leader": "Clay",       "badge_no": 5, "badge_name": "Quake Badge"},
+        {"city": "mistralton-city","leader": "Skyla",      "badge_no": 6, "badge_name": "Jet Badge"},
+        {"city": "icirrus-city",   "leader": "Brycen",     "badge_no": 7, "badge_name": "Freeze Badge"},
+        {"city": "opelucid-city",  "leader": "Drayden/Iris","badge_no": 8,"badge_name": "Legend Badge"},
+    ],
+    "Kalos": [
+        {"city": "santalune-city", "leader": "Viola",      "badge_no": 1, "badge_name": "Bug Badge"},
+        {"city": "cyllage-city",   "leader": "Grant",      "badge_no": 2, "badge_name": "Cliff Badge"},
+        {"city": "shalour-city",   "leader": "Korrina",    "badge_no": 3, "badge_name": "Rumble Badge"},
+        {"city": "coumarine-city", "leader": "Ramos",      "badge_no": 4, "badge_name": "Plant Badge"},
+        {"city": "lumiose-city",   "leader": "Clemont",    "badge_no": 5, "badge_name": "Voltage Badge"},
+        {"city": "laverre-city",   "leader": "Valerie",    "badge_no": 6, "badge_name": "Fairy Badge"},
+        {"city": "anistar-city",   "leader": "Olympia",    "badge_no": 7, "badge_name": "Psychic Badge"},
+        {"city": "snowbelle-city", "leader": "Wulfric",    "badge_no": 8, "badge_name": "Iceberg Badge"},
+    ],
+    # Alola não tem ginásios — mantenho lista vazia (o botão não aparece)
+    "Alola": [],
+    "Galar": [
+        {"city": "turffield",      "leader": "Milo",       "badge_no": 1, "badge_name": "Grass Badge"},
+        {"city": "hulbury",        "leader": "Nessa",      "badge_no": 2, "badge_name": "Water Badge"},
+        {"city": "motostoke",      "leader": "Kabu",       "badge_no": 3, "badge_name": "Fire Badge"},
+        {"city": "stow-on-side",   "leader": "Bea/Allister","badge_no": 4, "badge_name": "Fighting/Ghost Badge"},
+        {"city": "circhester",     "leader": "Gordie/Melony","badge_no": 5, "badge_name": "Rock/Ice Badge"},
+        {"city": "spikemuth",      "leader": "Piers",      "badge_no": 6, "badge_name": "Dark Badge"},
+        {"city": "hammerlocke",    "leader": "Raihan",     "badge_no": 7, "badge_name": "Dragon Badge"},
+        # 8º “ginásio” é a qualificação final pré-liga (o jogo trata no desafio em Wyndon),
+        # mas para efeitos de gate 8, você pode conceder o 8º em Hammerlocke (revanche)
+        {"city": "wyndon",         "leader": "Champion Cup","badge_no": 8, "badge_name": "Champion Qualifier"},
+    ],
+    "Paldea": [
+        {"city": "cortondo",       "leader": "Katy",       "badge_no": 1, "badge_name": "Bug Badge"},
+        {"city": "artazon",        "leader": "Brassius",   "badge_no": 2, "badge_name": "Grass Badge"},
+        {"city": "levincia",       "leader": "Iono",       "badge_no": 3, "badge_name": "Electric Badge"},
+        {"city": "cascarrafa",     "leader": "Kofu",       "badge_no": 4, "badge_name": "Water Badge"},
+        {"city": "medali",         "leader": "Larry",      "badge_no": 5, "badge_name": "Normal Badge"},
+        {"city": "montenevera",    "leader": "Ryme",       "badge_no": 6, "badge_name": "Ghost Badge"},
+        {"city": "alfornada",      "leader": "Tulip",      "badge_no": 7, "badge_name": "Psychic Badge"},
+        {"city": "glaseado-gym",   "leader": "Grusha",     "badge_no": 8, "badge_name": "Ice Badge"},
+    ],
+}
+
+def get_gym_order(region: str) -> List[Dict[str, object]]:
+    """Retorna a lista de ginásios para a região (ou lista vazia)."""
+    return GYM_ORDERS.get(region, [])
+
+def next_gym_info(region: str, current_badges: int) -> Optional[Dict[str, object]]:
+    """Com base no nº de insígnias do jogador, retorna o próximo ginásio daquela região."""
+    try:
+        n = int(current_badges or 0) + 1
+    except Exception:
+        n = 1
+    for g in get_gym_order(region):
+        if int(g.get("badge_no", 0)) == n:
+            return g
+    return None
+
+
+# ==============================================================
 #  🗺️ Consultas de local e rotas (Supabase client síncrono)
 # ==============================================================
 
@@ -69,10 +177,6 @@ def get_adjacent_routes(
     *,
     mainline_only: bool = False,
 ) -> List[Dict]:
-    """
-    Retorna todas as rotas conectadas a `location_from` na região dada.
-    Compatível com Supabase Python síncrono.
-    """
     print(f"[event_utils:get_adjacent_routes] region={region!r} location_from={location_from!r} "
           f"mainline_only={mainline_only}", flush=True)
     try:
@@ -100,9 +204,6 @@ def get_next_mainline_edge(
     region: str,
     location_from: str
 ) -> Optional[Dict]:
-    """
-    Retorna a próxima rota principal a partir de `location_from`.
-    """
     print(f"[event_utils:get_next_mainline_edge] region={region!r} location_from={location_from!r}", flush=True)
     try:
         q = (
@@ -133,16 +234,6 @@ def get_permitted_destinations(
     *,
     mainline_only: bool = False,
 ) -> List[Dict]:
-    """
-    Filtra as rotas adjacentes por 'gate' e retorna destinos liberados.
-    Retorna lista de DICTS no formato:
-        {
-          "location_to": str,
-          "step": int | None,
-          "is_mainline": bool,
-          "gate": dict
-        }
-    """
     print(f"[event_utils:get_permitted_destinations] region={region!r} from={location_from!r} "
           f"mainline_only={mainline_only}", flush=True)
     edges = get_adjacent_routes(supabase, region, location_from, mainline_only=mainline_only)
@@ -169,15 +260,12 @@ def get_permitted_destinations(
 
 
 def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
-    """
-    Retorna informações básicas de uma location.
-    """
     print(f"[event_utils:get_location_info] location_api_name={location_api_name!r}", flush=True)
     try:
         res = (
             supabase
             .table("locations")
-            .select("location_api_name,name,type,region,has_gym,has_shop,default_area")
+            .select("location_api_name,name,type,region,has_gym,has_shop,default_area,metadata")
             .eq("location_api_name", location_api_name)
             .limit(1)
             .execute()
