@@ -6,6 +6,7 @@ import asyncio
 import discord
 from discord.ext import commands
 from discord import ui
+from typing import Optional
 
 from supabase import create_client, Client
 
@@ -36,7 +37,7 @@ def supabase_fetch_one(supabase: Client, table: str, **filters) -> dict | None:
         return None
 
 # ===============================================
-# Spawn por região (NOVO + mantido)
+# Spawn por região (mantido + ajustado)
 # ===============================================
 
 REGION_SPAWNS: dict[str, str] = {
@@ -46,14 +47,15 @@ REGION_SPAWNS: dict[str, str] = {
     "Sinnoh": "twinleaf-town",
     "Unova": "nuvema-town",
     "Kalos": "vaniville-town",
-    # ajuste conforme seu schema
-    "Alola": "hauoli-city",  # se usar Iki Town, troque aqui
+    "Alola": "iki-town",           # << ajustado para Iki (combina com seu DB)
     "Galar": "postwick",
     "Paldea": "cabo-poco",
 }
 
 def _spawn_for_region(region: str) -> str:
     return REGION_SPAWNS.get(region, "pallet-town")
+
+VALID_REGIONS = list(REGION_SPAWNS.keys())
 
 # ===============================================
 # Funções utilitárias do jogador / Pokémon (mantidas)
@@ -280,7 +282,7 @@ class RegionSelectView(ui.View):
 
         discord_id = interaction.user.id
 
-        # Monta os dados do player (mantido) + spawn por região (corrigido)
+        # Monta os dados do player + spawn correto da região
         player_data = {
             "discord_id": discord_id,
             "trainer_name": self.trainer_name,
@@ -355,7 +357,7 @@ class RegionSelectView(ui.View):
         await self.select_region(interaction, "Paldea")
 
 # ===============================================
-# View de confirmação para o delete (NOVA)
+# View de confirmação para o delete (mantida)
 # ===============================================
 
 class ConfirmDeleteView(ui.View):
@@ -501,6 +503,70 @@ class PlayerCog(commands.Cog):
         else:
             await ctx.send(f"❌ Erro: {result['error']}")
 
+    # ============================
+    # NOVOS COMANDOS
+    # ============================
+
+    @commands.command(name="setregion")
+    async def cmd_setregion(self, ctx: commands.Context, *, region: str):
+        """
+        Define/atualiza a região do jogador e aplica o spawn correspondente.
+        Uso: !setregion Paldea
+        """
+        region = (region or "").strip().title()
+        if region not in VALID_REGIONS:
+            await ctx.send(f"Região inválida. Escolha uma de: {', '.join(VALID_REGIONS)}")
+            return
+
+        spawn = _spawn_for_region(region)
+        try:
+            # upsert simples
+            (
+                self.supabase.table("players")
+                .upsert(
+                    {
+                        "discord_id": ctx.author.id,
+                        "current_region": region,
+                        "current_location_name": spawn,
+                    },
+                    on_conflict="discord_id",
+                )
+                .execute()
+            )
+            # garante update se já existia
+            (
+                self.supabase.table("players")
+                .update({"current_region": region, "current_location_name": spawn})
+                .eq("discord_id", ctx.author.id)
+                .execute()
+            )
+            await ctx.send(f"Região definida para **{region}**. Spawn em **{spawn.replace('-', ' ').title()}**.")
+        except Exception as e:
+            await ctx.send(f"Falha ao definir região: `{e}`")
+
+    @commands.command(name="whereami", aliases=["onde"])
+    async def cmd_whereami(self, ctx: commands.Context):
+        """Mostra região e local atual do jogador (debug rápido)."""
+        try:
+            res = (
+                self.supabase.table("players")
+                .select("current_region,current_location_name,badges")
+                .eq("discord_id", ctx.author.id)
+                .limit(1)
+                .execute()
+            )
+            rows = res.data or []
+            if not rows:
+                await ctx.send("Nenhum perfil encontrado. Use `!start` para iniciar.")
+                return
+            row = rows[0]
+            reg = row.get("current_region") or "—"
+            loc = row.get("current_location_name") or "—"
+            bdg = row.get("badges") or 0
+            await ctx.send(f"🌍 **{reg}** · 📍 **{loc.replace('-', ' ').title()}** · 🏅 **{bdg}/8**")
+        except Exception as e:
+            await ctx.send(f"Erro ao consultar: `{e}`")
+
     @commands.command(name="help")
     async def custom_help(self, ctx: commands.Context):
         embed = discord.Embed(
@@ -508,8 +574,10 @@ class PlayerCog(commands.Cog):
             description=(
                 "Comandos principais:\n"
                 "`!start` — criar personagem\n"
-                "`!adventure` — explorar o mundo\n"
+                "`!travel` — explorar o mundo\n"
                 "`!profile` — ver seu perfil\n"
+                "`!whereami` — ver região/local/insígnias\n"
+                "`!setregion <Região>` — trocar de região (vai para o spawn)\n"
                 "`!delete` — excluir sua jornada\n"
                 "`!addpokemon <nome> [level]` — adicionar Pokémon ao seu time/box"
             ),

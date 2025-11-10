@@ -3,14 +3,52 @@ from typing import Any, Dict, List, Optional
 import json
 
 # ==============================================================
+#  🌍 SPAWNS por região
+# ==============================================================
+
+START_SPAWNS: Dict[str, str] = {
+    "Kanto":  "pallet-town",
+    "Johto":  "new-bark-town",
+    "Hoenn":  "littleroot-town",
+    "Sinnoh": "twinleaf-town",
+    "Unova":  "nuvema-town",
+    "Kalos":  "vaniville-town",
+    "Alola":  "iki-town",
+    "Galar":  "postwick",
+    "Paldea": "cabo-poco",
+}
+
+def get_region_spawn(region: str) -> str:
+    """Slug de spawn padrão para a região."""
+    return START_SPAWNS.get((region or "").strip(), "pallet-town")
+
+
+def ensure_player_spawn(supabase: Any, discord_id: int, region: Optional[str]) -> Optional[str]:
+    """
+    Se o jogador não tiver current_location_name, seta o spawn padrão da região.
+    Retorna o location aplicado (ou None se não alterou).
+    """
+    if not region:
+        return None
+    try:
+        spawn = get_region_spawn(region)
+        (
+            supabase.table("players")
+            .update({"current_location_name": spawn})
+            .eq("discord_id", discord_id)
+            .execute()
+        )
+        return spawn
+    except Exception as e:
+        print(f"[ensure_player_spawn][ERROR] {e}", flush=True)
+        return None
+
+
+# ==============================================================
 #  🔒 GATES (regras para travas de acesso)
 # ==============================================================
 
 def _coerce_gate(gate_val: Any) -> Dict:
-    """
-    Converte o valor de 'gate' em dict.
-    Aceita {}, string JSON, None, etc.
-    """
     if not gate_val:
         return {}
     if isinstance(gate_val, dict):
@@ -27,17 +65,10 @@ def _coerce_gate(gate_val: Any) -> Dict:
     return {}
 
 def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
-    """
-    Retorna True se o jogador atende às condições do gate.
-    Suporta:
-      - requires_badge
-      - requires_flags
-    """
     gate = _coerce_gate(gate)
     if not gate:
         return True
 
-    # Requer um número mínimo de insígnias
     requires_badge = gate.get("requires_badge")
     if requires_badge is not None:
         badges = getattr(player, "badges", 0) or 0
@@ -46,7 +77,6 @@ def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
         if int(badges) < int(requires_badge):
             return False
 
-    # Requer certas flags de história
     required_flags = gate.get("requires_flags")
     if required_flags:
         have = set(getattr(player, "flags", []) or [])
@@ -61,8 +91,6 @@ def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
 #  🧭 ORDENS DE GINÁSIOS (todas as regiões)
 # ==============================================================
 
-# Cada item: {"city": <slug da cidade>, "leader": "Nome", "badge_no": 1..8, "badge_name": "... Badge"}
-# Usei a ordem canônica por jogo. Se alguma cidade não existir no seu DB, o botão de ginásio não aparecerá nela.
 GYM_ORDERS: Dict[str, List[Dict[str, object]]] = {
     "Kanto": [
         {"city": "pewter-city",    "leader": "Brock",      "badge_no": 1, "badge_name": "Boulder Badge"},
@@ -70,7 +98,7 @@ GYM_ORDERS: Dict[str, List[Dict[str, object]]] = {
         {"city": "vermilion-city", "leader": "Lt. Surge",  "badge_no": 3, "badge_name": "Thunder Badge"},
         {"city": "celadon-city",   "leader": "Erika",      "badge_no": 4, "badge_name": "Rainbow Badge"},
         {"city": "fuchsia-city",   "leader": "Koga",       "badge_no": 5, "badge_name": "Soul Badge"},
-        {"city": "saffron-city",   "leader": "Sabrina",    "badge_no":  6, "badge_name": "Marsh Badge"},
+        {"city": "saffron-city",   "leader": "Sabrina",    "badge_no": 6, "badge_name": "Marsh Badge"},
         {"city": "cinnabar-island","leader": "Blaine",     "badge_no": 7, "badge_name": "Volcano Badge"},
         {"city": "viridian-city",  "leader": "Giovanni",   "badge_no": 8, "badge_name": "Earth Badge"},
     ],
@@ -112,7 +140,7 @@ GYM_ORDERS: Dict[str, List[Dict[str, object]]] = {
         {"city": "driftveil-city", "leader": "Clay",       "badge_no": 5, "badge_name": "Quake Badge"},
         {"city": "mistralton-city","leader": "Skyla",      "badge_no": 6, "badge_name": "Jet Badge"},
         {"city": "icirrus-city",   "leader": "Brycen",     "badge_no": 7, "badge_name": "Freeze Badge"},
-        {"city": "opelucid-city",  "leader": "Drayden/Iris","badge_no": 8,"badge_name": "Legend Badge"},
+        {"city": "opelucid-city",  "leader": "Drayden/Iris","badge_no": 8, "badge_name": "Legend Badge"},
     ],
     "Kalos": [
         {"city": "santalune-city", "leader": "Viola",      "badge_no": 1, "badge_name": "Bug Badge"},
@@ -124,7 +152,6 @@ GYM_ORDERS: Dict[str, List[Dict[str, object]]] = {
         {"city": "anistar-city",   "leader": "Olympia",    "badge_no": 7, "badge_name": "Psychic Badge"},
         {"city": "snowbelle-city", "leader": "Wulfric",    "badge_no": 8, "badge_name": "Iceberg Badge"},
     ],
-    # Alola não tem ginásios — mantenho lista vazia (o botão não aparece)
     "Alola": [],
     "Galar": [
         {"city": "turffield",      "leader": "Milo",       "badge_no": 1, "badge_name": "Grass Badge"},
@@ -134,8 +161,6 @@ GYM_ORDERS: Dict[str, List[Dict[str, object]]] = {
         {"city": "circhester",     "leader": "Gordie/Melony","badge_no": 5, "badge_name": "Rock/Ice Badge"},
         {"city": "spikemuth",      "leader": "Piers",      "badge_no": 6, "badge_name": "Dark Badge"},
         {"city": "hammerlocke",    "leader": "Raihan",     "badge_no": 7, "badge_name": "Dragon Badge"},
-        # 8º “ginásio” é a qualificação final pré-liga (o jogo trata no desafio em Wyndon),
-        # mas para efeitos de gate 8, você pode conceder o 8º em Hammerlocke (revanche)
         {"city": "wyndon",         "leader": "Champion Cup","badge_no": 8, "badge_name": "Champion Qualifier"},
     ],
     "Paldea": [
@@ -151,11 +176,9 @@ GYM_ORDERS: Dict[str, List[Dict[str, object]]] = {
 }
 
 def get_gym_order(region: str) -> List[Dict[str, object]]:
-    """Retorna a lista de ginásios para a região (ou lista vazia)."""
     return GYM_ORDERS.get(region, [])
 
 def next_gym_info(region: str, current_badges: int) -> Optional[Dict[str, object]]:
-    """Com base no nº de insígnias do jogador, retorna o próximo ginásio daquela região."""
     try:
         n = int(current_badges or 0) + 1
     except Exception:
@@ -167,28 +190,18 @@ def next_gym_info(region: str, current_badges: int) -> Optional[Dict[str, object
 
 
 # ==============================================================
-#  🗺️ Consultas de local e rotas (Supabase client síncrono)
+#  🗺️ Consultas de local e rotas
 # ==============================================================
 
-def get_adjacent_routes(
-    supabase,
-    region: str,
-    location_from: str,
-    *,
-    mainline_only: bool = False,
-) -> List[Dict]:
-    print(f"[event_utils:get_adjacent_routes] region={region!r} location_from={location_from!r} "
-          f"mainline_only={mainline_only}", flush=True)
+def get_adjacent_routes(supabase, region: str, location_from: str, *, mainline_only: bool = False) -> List[Dict]:
+    print(f"[event_utils:get_adjacent_routes] region={region!r} location_from={location_from!r} mainline_only={mainline_only}", flush=True)
     try:
-        q = (
-            supabase.table("routes")
-            .select("location_from,location_to,step,is_mainline,gate")
-            .ilike("region", region)
-            .ilike("location_from", location_from)
-        )
+        q = (supabase.table("routes")
+             .select("location_from,location_to,step,is_mainline,gate")
+             .ilike("region", region)
+             .ilike("location_from", location_from))
         if mainline_only:
             q = q.eq("is_mainline", True)
-
         q = q.order("step").order("location_to")
         res = q.execute()
         data = list(res.data or [])
@@ -198,24 +211,16 @@ def get_adjacent_routes(
         print(f"[event_utils:get_adjacent_routes][ERROR] {e}", flush=True)
         return []
 
-
-def get_next_mainline_edge(
-    supabase,
-    region: str,
-    location_from: str
-) -> Optional[Dict]:
+def get_next_mainline_edge(supabase, region: str, location_from: str) -> Optional[Dict]:
     print(f"[event_utils:get_next_mainline_edge] region={region!r} location_from={location_from!r}", flush=True)
     try:
-        q = (
-            supabase
-            .table("routes")
-            .select("location_from,location_to,step,gate")
-            .eq("region", region)
-            .eq("location_from", location_from)
-            .eq("is_mainline", True)
-            .order("step")
-            .limit(1)
-        )
+        q = (supabase.table("routes")
+             .select("location_from,location_to,step,gate")
+             .eq("region", region)
+             .eq("location_from", location_from)
+             .eq("is_mainline", True)
+             .order("step")
+             .limit(1))
         res = q.execute()
         rows = res.data or []
         edge = dict(rows[0]) if rows else None
@@ -225,17 +230,8 @@ def get_next_mainline_edge(
         print(f"[event_utils:get_next_mainline_edge][ERROR] {e}", flush=True)
         return None
 
-
-def get_permitted_destinations(
-    supabase,
-    player: Any,
-    region: str,
-    location_from: str,
-    *,
-    mainline_only: bool = False,
-) -> List[Dict]:
-    print(f"[event_utils:get_permitted_destinations] region={region!r} from={location_from!r} "
-          f"mainline_only={mainline_only}", flush=True)
+def get_permitted_destinations(supabase, player: Any, region: str, location_from: str, *, mainline_only: bool = False) -> List[Dict]:
+    print(f"[event_utils:get_permitted_destinations] region={region!r} from={location_from!r} mainline_only={mainline_only}", flush=True)
     edges = get_adjacent_routes(supabase, region, location_from, mainline_only=mainline_only)
     print(f"[event_utils:get_permitted_destinations] edges={len(edges)}", flush=True)
 
@@ -250,7 +246,6 @@ def get_permitted_destinations(
                     "is_mainline": e.get("is_mainline", False),
                     "gate": gate
                 })
-        # Ordena por passo (se existir), depois alfabético
         allowed.sort(key=lambda d: (d["step"] is None, d["step"] or 10**9, d["location_to"]))
         print(f"[event_utils:get_permitted_destinations] allowed={len(allowed)} sample={allowed[:2]}", flush=True)
         return allowed
@@ -258,18 +253,14 @@ def get_permitted_destinations(
         print(f"[event_utils:get_permitted_destinations][ERROR] {e}", flush=True)
         return []
 
-
 def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
     print(f"[event_utils:get_location_info] location_api_name={location_api_name!r}", flush=True)
     try:
-        res = (
-            supabase
-            .table("locations")
-            .select("location_api_name,name,type,region,has_gym,has_shop,default_area,metadata")
-            .eq("location_api_name", location_api_name)
-            .limit(1)
-            .execute()
-        )
+        res = (supabase.table("locations")
+               .select("location_api_name,name,type,region,has_gym,has_shop,default_area,metadata")
+               .eq("location_api_name", location_api_name)
+               .limit(1)
+               .execute())
         rows = res.data or []
         info = dict(rows[0]) if rows else None
         print(f"[event_utils:get_location_info] found={bool(info)} info={info}", flush=True)

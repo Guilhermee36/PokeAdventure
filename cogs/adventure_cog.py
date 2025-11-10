@@ -569,35 +569,53 @@ class AdventureCog(commands.Cog):
         self.bot = bot
         self.supabase = supabase
 
+    # ===== Helper: carrega player do BD, aplica spawn se necessário =====
+    def _load_player_from_db(self, user_id: int) -> Optional[PlayerAdapter]:
+        try:
+            res = (
+                self.supabase.table("players")
+                .select("current_region,current_location_name,badges,flags")
+                .eq("discord_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            rows = res.data or []
+            if not rows:
+                return None
+
+            row = rows[0]
+            region = row.get("current_region") or "Kanto"
+            location = row.get("current_location_name")
+
+            # se não houver location, aplica spawn da região
+            if not location:
+                location = event_utils.ensure_player_spawn(self.supabase, user_id, region) or event_utils.get_region_spawn(region)
+
+            player = PlayerAdapter(user_id=user_id, region=region, location_api_name=location)
+            player.badges = row.get("badges", 0) or 0
+            player.flags = row.get("flags", []) or []
+            return player
+        except Exception as e:
+            print(f"[AdventureCog:_load_player_from_db][ERROR] {e}", flush=True)
+            return None
+
     @commands.command(name="travel", aliases=["viagem"])
     async def cmd_travel(self, ctx: commands.Context, *, apenas_principal: Optional[bool] = False):
         """
-        Abre o menu de viagem para a location atual do jogador.
-        Integra com a tabela players:
-          - atualiza current_location_name ao viajar
-          - lê badges/flags para respeitar gates (8 insígnias, etc.)
+        Abre o menu de viagem. SEM fallback para Pallet:
+        busca o player no BD e, se não tiver location, aplica o spawn da região.
         """
-        # >>> Substitua por seu mecanismo real de player (fetch do BD) <<<
-        player = getattr(ctx, "player", None)
+        player = self._load_player_from_db(ctx.author.id)
         if player is None:
-            # fallback: cria adaptador mínimo
-            player = PlayerAdapter(
-                user_id=ctx.author.id,
-                region="Kanto",
-                location_api_name="pallet-town",
-            )
+            await ctx.send("Você ainda não tem perfil criado. Use `!setregion <Região>` para começar.")
+            return
 
+        # instancia a mesma TravelViewSafe da versão anterior:
         view = TravelViewSafe(self.bot, self.supabase, player, bool(apenas_principal))
         await view.start(ctx)
 
 
-# -------- setup para loader automático --------
-
 async def setup(bot: commands.Bot):
-    """
-    O loader automático chamará apenas setup(bot).
-    Aqui esperamos que você tenha definido bot.supabase antes de carregar a extensão.
-    """
     supabase = getattr(bot, "supabase", None)
     if supabase is None:
         raise RuntimeError("AdventureCog: defina bot.supabase antes de carregar a extensão.")
