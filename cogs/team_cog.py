@@ -145,11 +145,11 @@ class TeamCog(commands.Cog):
 
     def _swap_or_move(self, user_id: int, src_id: str, dest_slot: int) -> str:
         """
-        SWAP seguro usando NULL como temporário (aceito pela constraint):
-          - Se destino ocupado: source -> NULL; destino -> src_slot; source -> dest_slot
-          - Se destino vazio:  source -> dest_slot
+        MOVE/SWAP seguro:
+        - Se destino ocupado: SWAP (source <-> destino) usando NULL temporário.
+        - Sempre limpa duplicatas do slot de destino (dados "sujos").
         """
-        # 1) slot atual do source
+        # slot atual do source
         src_row = (
             self.supabase.table("player_pokemon")
             .select("id,party_position")
@@ -167,7 +167,14 @@ class TeamCog(commands.Cog):
         if src_slot == dest_slot:
             return "Esse Pokémon já está nesse slot."
 
-        # 2) ocupante do destino?
+        # garanta que NÃO há duplicatas no slot destino (qualquer outro que, por bug, também esteja lá)
+        self.supabase.table("player_pokemon").update({"party_position": None}) \
+            .eq("player_id", user_id) \
+            .eq("party_position", dest_slot) \
+            .neq("id", src_id) \
+            .execute()
+
+        # agora ver se ainda existe um "destinatário" legítimo (após limpeza, no máximo 0..1)
         dst_row = (
             self.supabase.table("player_pokemon")
             .select("id,party_position")
@@ -178,19 +185,49 @@ class TeamCog(commands.Cog):
         ).data or []
 
         if dst_row:
-            # ---- SWAP com NULL temporário ----
+            # SWAP com NULL temporário
             dst_id = dst_row[0]["id"]
             # a) source -> NULL
             self.supabase.table("player_pokemon").update({"party_position": None}).eq("id", src_id).execute()
-            # b) destino -> src_slot
+            # b) dest -> src_slot
             self.supabase.table("player_pokemon").update({"party_position": src_slot}).eq("id", dst_id).execute()
             # c) source (NULL) -> dest_slot
             self.supabase.table("player_pokemon").update({"party_position": dest_slot}).eq("id", src_id).execute()
             return f"✅ Slots trocados: #{src_slot} ↔ #{dest_slot}."
         else:
-            # ---- MOVE simples ----
+            # MOVE simples
             self.supabase.table("player_pokemon").update({"party_position": dest_slot}).eq("id", src_id).execute()
             return f"✅ Pokémon movido para o slot #{dest_slot}."
+        
+    def _move_from_box_to_party(self, user_id: int, box_mon_id: str, dest_slot: int) -> str:
+        """
+        Move um Pokémon da BOX (party_position NULL) para a Party no slot desejado.
+        Se o slot estiver ocupado, o ocupante vai para a BOX (NULL) — efeito de SWAP.
+        Também limpa duplicatas do slot destino.
+        """
+        # validar que o mon está na BOX
+        row = (
+            self.supabase.table("player_pokemon")
+            .select("id,party_position")
+            .eq("id", box_mon_id)
+            .eq("player_id", user_id)
+            .limit(1)
+            .execute()
+        ).data or []
+        if not row:
+            return "Pokémon não encontrado."
+        if row[0]["party_position"] is not None:
+            return "Esse Pokémon já está na party."
+
+        # limpa quaisquer duplicatas no destino
+        self.supabase.table("player_pokemon").update({"party_position": None}) \
+            .eq("player_id", user_id) \
+            .eq("party_position", dest_slot) \
+            .execute()
+
+        # se tinha um ocupante legítimo, já está NULL (Box). agora coloca o mon da Box no slot
+        self.supabase.table("player_pokemon").update({"party_position": dest_slot}).eq("id", box_mon_id).execute()
+        return f"✅ Pokémon movido da Box para o slot #{dest_slot}."
 
     # ---------- Helpers PokeAPI / Embeds ----------
     async def _get_sprite_url(self, api_name: str, shiny: bool = False) -> Optional[str]:
@@ -307,58 +344,39 @@ class TeamCog(commands.Cog):
         embed.set_footer(text=f"Slot {focused_slot}/{len(full_team_db)} | {species_name} (Pokedex Nº {pokedex_id})")
         return embed
 
-    async def _render_box_embed(self, user_id: int) -> discord.Embed:
-        """
-        Gera Embed com Party (slots 1..6) + amostra da Box (até 12) — inclui sprites (links).
-        """
-        rows = self._fetch_all_mons(user_id)
-        party = [r for r in rows if r.get("party_position") is not None]
-        box = [r for r in rows if r.get("party_position") is None]
+    async def _render_box_only_embed(self, user_id: int) -> discord.Embed:
+        rows = (
+            self.supabase.table("player_pokemon")
+            .select("id,pokemon_api_name,nickname,current_level,is_shiny")
+            .eq("player_id", user_id)
+            .is_("party_position", None)
+            .order("pokemon_api_name")
+            .execute()
+        ).data or []
 
-        emb = discord.Embed(title="📦 Seu PC — Party & Box", color=discord.Color.blurple())
+        emb = discord.Embed(title="📦 Box", description="Pokémon disponíveis na sua Box.", color=discord.Color.blurple())
+        if not rows:
+            emb.description = "Sua Box está vazia."
+            return emb
 
-        # Thumbnail: sprite do #1
-        if party:
-            p0 = sorted(party, key=lambda x: x["party_position"])[0]
-            thumb_url = await self._get_sprite_url(p0["pokemon_api_name"], bool(p0.get("is_shiny")))
-            if thumb_url:
-                emb.set_thumbnail(url=thumb_url)
+        shown = 0
+        for r in rows:
+            if shown >= 18:  # limita para caber bem
+                break
+            name = (r.get("nickname") or r.get("pokemon_api_name") or "").capitalize()
+            lvl = r.get("current_level", 1)
+            sprite = await self._get_sprite_url(r["pokemon_api_name"], bool(r.get("is_shiny")))
+            val = f"Lv.{lvl}"
+            if sprite:
+                val += f" — [sprite]({sprite})"
+            emb.add_field(name=name, value=val, inline=True)
+            shown += 1
 
-        # Party
-        if party:
-            for r in sorted(party, key=lambda x: x["party_position"]):
-                name = (r.get("nickname") or r.get("pokemon_api_name") or "").capitalize()
-                slot = r["party_position"]
-                hp = f"{r['current_hp']}/{r['max_hp']} HP"
-                lvl = r["current_level"]
-                sprite = await self._get_sprite_url(r["pokemon_api_name"], bool(r.get("is_shiny")))
-                value = f"Lv.{lvl} — {hp}\n"
-                if sprite:
-                    value += f"[sprite]({sprite})"
-                emb.add_field(name=f"#{slot} • {name}", value=value, inline=True)
-        else:
-            emb.add_field(name="Party", value="— (vazio)", inline=False)
-
-        # Box (limita 12)
-        if box:
-            shown = 0
-            for r in box:
-                if shown >= 12:
-                    break
-                name = (r.get("nickname") or r.get("pokemon_api_name") or "").capitalize()
-                lvl = r["current_level"]
-                sprite = await self._get_sprite_url(r["pokemon_api_name"], bool(r.get("is_shiny")))
-                value = f"Lv.{lvl}"
-                if sprite:
-                    value += f" — [sprite]({sprite})"
-                emb.add_field(name=name, value=value, inline=True)
-                shown += 1
-            if len(box) > shown:
-                emb.add_field(name="…", value=f"+{len(box)-shown} na Box", inline=False)
-        else:
-            emb.add_field(name="Box", value="— (vazia)", inline=False)
+        if len(rows) > shown:
+            emb.add_field(name="…", value=f"+{len(rows)-shown} na Box", inline=False)
 
         return emb
+
 
     async def _render_party_embed(self, user_id: int, title: str, desc: str) -> discord.Embed:
         """
@@ -368,10 +386,7 @@ class TeamCog(commands.Cog):
         party_rows.sort(key=lambda x: x["party_position"])
 
         emb = discord.Embed(title=title, description=desc, color=discord.Color.blue())
-        if party_rows:
-            thumb = await self._get_sprite_url(party_rows[0]["pokemon_api_name"], bool(party_rows[0].get("is_shiny")))
-            if thumb:
-                emb.set_thumbnail(url=thumb)
+        pass
 
         for r in party_rows:
             name = (r.get("nickname") or r.get("pokemon_api_name") or "").capitalize()
@@ -426,8 +441,90 @@ class TeamCog(commands.Cog):
     # ---------------- Comando !box (Embed com sprites) ----------------
     @commands.command(name="box")
     async def cmd_box(self, ctx: commands.Context):
-        emb = await self._render_box_embed(ctx.author.id)
+        user_id = ctx.author.id
+
+        # 1) Embed só com a Box
+        emb = await self._render_box_only_embed(user_id)
         await ctx.send(embed=emb)
+
+        # 2) Monta UI (Box -> Party)
+        # carrega BOX
+        box_rows = (
+            self.supabase.table("player_pokemon")
+            .select("id,pokemon_api_name,nickname,current_level,is_shiny")
+            .eq("player_id", user_id)
+            .is_("party_position", None)
+            .order("pokemon_api_name")
+            .execute()
+        ).data or []
+
+        if not box_rows:
+            return  # nada para mover
+
+        # Select de Pokémon da Box
+        options_mon: List[discord.SelectOption] = []
+        for r in box_rows:
+            name = (r.get("nickname") or r.get("pokemon_api_name") or "").capitalize()
+            lvl = r.get("current_level", 1)
+            options_mon.append(discord.SelectOption(label=f"{name} (Lv.{lvl})", value=str(r["id"])))
+
+        class PickMon(discord.ui.Select):
+            def __init__(self, opts, owner_id: int):
+                super().__init__(placeholder="Escolha um Pokémon da Box…", min_values=1, max_values=1, options=opts)
+                self.value_id: Optional[str] = None
+                self.owner_id = owner_id
+            async def callback(self, inter: discord.Interaction):
+                if inter.user.id != self.owner_id:
+                    return await inter.response.send_message("Não é sua interface.", ephemeral=True)
+                self.value_id = self.values[0]
+                await inter.response.defer()
+
+        # Select de slot destino (na Party)
+        options_slot = [discord.SelectOption(label=f"Slot {i}", value=str(i)) for i in range(1, 7)]
+        class PickSlot(discord.ui.Select):
+            def __init__(self, opts, owner_id: int):
+                super().__init__(placeholder="Mover para o slot…", min_values=1, max_values=1, options=opts)
+                self.slot_val: Optional[str] = None
+                self.owner_id = owner_id
+            async def callback(self, inter: discord.Interaction):
+                if inter.user.id != self.owner_id:
+                    return await inter.response.send_message("Não é sua interface.", ephemeral=True)
+                self.slot_val = self.values[0]
+                await inter.response.defer()
+
+        sel_mon = PickMon(options_mon, ctx.author.id)
+        sel_slot = PickSlot(options_slot, ctx.author.id)
+        btn_confirm = discord.ui.Button(label="Mover da Box → Party", style=discord.ButtonStyle.success)
+        btn_cancel = discord.ui.Button(label="Cancelar", style=discord.ButtonStyle.secondary)
+
+        view = discord.ui.View(timeout=120)
+        view.add_item(sel_mon); view.add_item(sel_slot); view.add_item(btn_confirm); view.add_item(btn_cancel)
+
+        async def on_confirm(inter: discord.Interaction):
+            if inter.user.id != ctx.author.id:
+                return await inter.response.send_message("Não é sua interface.", ephemeral=True)
+            if not sel_mon.value_id or not sel_slot.slot_val:
+                return await inter.response.send_message("Escolha o Pokémon e o slot de destino.", ephemeral=True)
+            try:
+                dest_slot = int(sel_slot.slot_val)
+                msg_txt = self._move_from_box_to_party(user_id, sel_mon.value_id, dest_slot)
+                # renderiza embeds atualizados (box e party)
+                emb_party = await self._render_party_embed(user_id, "👥 Party atualizada", msg_txt)
+                emb_box = await self._render_box_only_embed(user_id)
+                await inter.response.edit_message(content=None, embed=emb_party, view=None)
+                await ctx.send(embed=emb_box)  # mostra a box após a mudança
+            except Exception as e:
+                await inter.response.edit_message(content=f"Falha ao mover: `{e}`", view=None)
+
+        async def on_cancel(inter: discord.Interaction):
+            if inter.user.id != ctx.author.id:
+                return await inter.response.send_message("Não é sua interface.", ephemeral=True)
+            await inter.response.edit_message(content="Operação cancelada.", view=None)
+
+        btn_confirm.callback = on_confirm
+        btn_cancel.callback = on_cancel
+
+        await ctx.send("Mover da **Box** para a **Party**:", view=view)
 
     # ---------------- Comando textual opcional: !partyset ----------------
     @commands.command(name="partyset")
