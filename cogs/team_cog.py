@@ -6,6 +6,8 @@ from discord import ui
 from supabase import create_client, Client
 import asyncio
 import json
+from typing import List, Optional
+
 
 import utils.pokeapi_service as pokeapi
 
@@ -105,6 +107,16 @@ class TeamCog(commands.Cog):
         except Exception as e:
             print(f"Erro ao buscar time no Supabase (Sync): {e}")
             return []
+        
+    def _fetch_all_mons(self, user_id: int) -> List[dict]:
+        res = (
+        self.supabase.table("player_pokemon")
+        .select("id,pokemon_api_name,nickname,party_position,current_hp,max_hp,current_level")
+        .eq("player_id", user_id)
+        .order("party_position", desc=False)
+        .execute()
+        )
+        return res.data or []
 
     def _swap_or_move(self, user_id: int, src_id: str, dest_slot: int) -> str:
         """
@@ -289,6 +301,66 @@ class TeamCog(commands.Cog):
             await ctx.send(f"Acalme-se, Treinador! Você pode checar seu time novamente em {error.retry_after:.1f} segundos.", delete_after=5)
         else:
             await ctx.send(f"Ocorreu um erro: {error}")
+    # ---------------- Comando de visualização do box (lista simples) ----------------
+    @commands.command(name="box")
+    async def cmd_box(self, ctx: commands.Context):
+        rows = self._fetch_all_mons(ctx.author.id)
+        party = [r for r in rows if r.get("party_position")]
+        box = [r for r in rows if not r.get("party_position")]
+
+        def fmt(r):
+            name = r.get("nickname") or r.get("pokemon_api_name")
+            return f"{name.capitalize()} (Lv.{r['current_level']}) — {r['current_hp']}/{r['max_hp']} HP"
+
+        lines = ["**Party**:"]
+        if party:
+            for r in sorted(party, key=lambda x: x["party_position"]):
+                lines.append(f"#{r['party_position']}: {fmt(r)}")
+        else:
+            lines.append("— (vazio)")
+
+        lines.append("\n**Box**:")
+        if box:
+            for r in box[:30]:
+                lines.append(f"- {fmt(r)}")
+            if len(box) > 30:
+                lines.append(f"... (+{len(box)-30})")
+        else:
+            lines.append("— (vazio)")
+
+        await ctx.send("\n".join(lines))
+    # ---------------- Comando de movimentação na party (swap/move) ----------------
+    @commands.command(name="partyset")
+    async def cmd_partyset(self, ctx: commands.Context, *, args: str):
+        """
+        Uso: !partyset <nome|apelido> <slot>
+        Move o Pokémon da PARTY para o slot desejado.
+        Se o destino estiver ocupado, faz SWAP.
+        """
+        try:
+            parts = args.rsplit(" ", 1)
+            target_name = parts[0].strip().lower()
+            slot = int(parts[1])
+            if not 1 <= slot <= 6:
+                return await ctx.send("Slot inválido (use 1–6).")
+        except Exception:
+            return await ctx.send("Uso: `!partyset <nome|apelido> <slot>`")
+
+        rows = self._fetch_all_mons(ctx.author.id)
+        # procurar APENAS na party (não faz sentido mover da Box direto por nome)
+        party = [r for r in rows if r.get("party_position") is not None]
+
+        cand = None
+        for r in party:
+            nm = (r.get("nickname") or r.get("pokemon_api_name") or "").lower()
+            if nm == target_name:
+                cand = r
+                break
+        if not cand:
+            return await ctx.send("Pokémon não encontrado na party pelo nome/apelido.")
+
+        msg = self._swap_or_move(ctx.author.id, cand["id"], slot)
+        await ctx.send(msg)
 
     # ---------------- Gerenciador de party com swap: SelectTeam / MoveParty ----------------
     @commands.command(name="SelectTeam", aliases=["selectteam", "MoveParty", "moveparty"])
