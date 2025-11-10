@@ -559,3 +559,6 @@ class BattleCog(commands.Cog):
 
         embed = self._build_embed(st)
         msg = await ctx.send(embed=embed, view=self.BattleView(self, st))
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(BattleCog(bot))
