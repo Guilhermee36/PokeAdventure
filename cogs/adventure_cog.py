@@ -2,14 +2,13 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
-from typing import Any, List, Optional
-import math
+from typing import Any, Dict, List, Optional, Tuple
 import os
 import discord
 from discord.ext import commands
 
 # utils do projeto (usa Supabase síncrono)
-from utils import event_utils  # get_permitted_destinations, get_location_info
+from utils import event_utils  # get_permitted_destinations, get_location_info, get_next_mainline_edge
 
 MAX_DEST_PER_PAGE = 6
 
@@ -18,12 +17,28 @@ def slug_to_title(slug: str) -> str:
     return slug.replace("-", " ").title() if slug else "—"
 
 
+# Ordem canônica dos ginásios de Kanto — FireRed/LeafGreen
+# badge_no é 1..8
+GYM_ORDER_KANTO: List[Dict[str, object]] = [
+    {"city": "pewter-city",    "leader": "Brock",      "badge_no": 1, "badge_name": "Boulder Badge"},
+    {"city": "cerulean-city",  "leader": "Misty",      "badge_no": 2, "badge_name": "Cascade Badge"},
+    {"city": "vermilion-city", "leader": "Lt. Surge",  "badge_no": 3, "badge_name": "Thunder Badge"},
+    {"city": "celadon-city",   "leader": "Erika",      "badge_no": 4, "badge_name": "Rainbow Badge"},
+    {"city": "fuchsia-city",   "leader": "Koga",       "badge_no": 5, "badge_name": "Soul Badge"},
+    {"city": "saffron-city",   "leader": "Sabrina",    "badge_no": 6, "badge_name": "Marsh Badge"},
+    {"city": "cinnabar-island","leader": "Blaine",     "badge_no": 7, "badge_name": "Volcano Badge"},
+    {"city": "viridian-city",  "leader": "Giovanni",   "badge_no": 8, "badge_name": "Earth Badge"},
+]
+
+
 class TravelViewSafe(discord.ui.View):
     """
     Viagem:
     - Embed com Próximo Passo (história) + lista de destinos
     - Select para viajar
-    - Botões contextuais (curar, wild, pesca, surf) conforme a location
+    - Botões contextuais (curar, wild, pesca, surf)
+    - 🏆 Botão de Líder do Ginásio (se a cidade tiver ginásio)
+    - ❓ Help Travel (próximo ginásio + todos os passos)
     - Imagem por região em assets/Regions/<Região>.webp
     """
     def __init__(
@@ -53,6 +68,10 @@ class TravelViewSafe(discord.ui.View):
         self._btn_fish: Optional[discord.ui.Button] = None
         self._btn_surf: Optional[discord.ui.Button] = None
 
+        # novos botões
+        self._btn_gym: Optional[discord.ui.Button] = None
+        self._btn_help: Optional[discord.ui.Button] = None
+
     # ------------ lifecycle ------------
 
     async def start(self, ctx: commands.Context):
@@ -69,8 +88,8 @@ class TravelViewSafe(discord.ui.View):
                 print(f"[TravelViewSafe:start][WARN] falha ao anexar imagem: {e}", flush=True)
 
         embed = discord.Embed(
-            title=f"🧭 Viagem — {slug_to_title(self.player.location_api_name)}",
-            description="Carregando destinos...",
+            title=f"\U0001F9ED Viagem — {slug_to_title(self.player.location_api_name)}",
+            description="Carregando destinos.",
             color=discord.Color.blurple(),
         )
         if self._region_img_filename:
@@ -89,7 +108,7 @@ class TravelViewSafe(discord.ui.View):
         if not self.message:
             return
         err = discord.Embed(
-            title="🧭 Viagem — Falha ao carregar",
+            title="\U0001F9ED Viagem — Falha ao carregar",
             description=f"Houve um erro ao consultar os destinos.\n```{e}```",
             color=discord.Color.red(),
         )
@@ -129,7 +148,7 @@ class TravelViewSafe(discord.ui.View):
 
     # ------------ helpers ------------
 
-    def _label_for_route(self, d: dict) -> tuple[str, Optional[str]]:
+    def _label_for_route(self, d: dict) -> Tuple[str, Optional[str]]:
         """
         Retorna (label, desc) para a opção no Select.
         Regra:
@@ -157,13 +176,113 @@ class TravelViewSafe(discord.ui.View):
             # Atualiza memória
             self.player.location_api_name = to_slug
 
-            await self.message.channel.send(f"✈️ Viajando para **{slug_to_title(to_slug)}**...")
+            await self.message.channel.send(f"✈️ Viajando para **{slug_to_title(to_slug)}**.")
 
             await self._reload_destinations()
             await self._render()
         except Exception as e:
             print(f"[TravelViewSafe:_perform_travel][ERROR] {e}", flush=True)
             await self.message.channel.send(f"Não consegui viajar agora: `{e}`")
+
+    # ------------ features novas (gym/help) ------------
+
+    def _has_gym_here(self) -> bool:
+        """Retorna True se a location atual (cidade) tem ginásio."""
+        loc = self._loc_info or {}
+        return bool(loc.get("has_gym")) and (loc.get("type", "").lower() == "city")
+
+    def _get_next_gym_info(self) -> Optional[Dict[str, object]]:
+        """
+        Devolve dict com info do próximo ginásio baseado no número de insígnias do player.
+        Se badges >= 8, devolve None.
+        """
+        current_badges = getattr(self.player, "badges", 0) or 0
+        try:
+            current_badges = int(current_badges)
+        except Exception:
+            # se for lista/set, usa o tamanho
+            if isinstance(current_badges, (list, tuple, set)):
+                current_badges = len(current_badges)
+            else:
+                current_badges = 0
+
+        next_badge_no = current_badges + 1
+        for g in GYM_ORDER_KANTO:
+            if int(g["badge_no"]) == next_badge_no:
+                return g  # type: ignore[return-value]
+        return None
+
+    async def _send_next_gym_hint(self):
+        """
+        Envia dica do próximo ginásio (líder, cidade, número da insígnia e passo mais próximo).
+        Busca na rota principal o primeiro 'step' que leva para essa cidade.
+        """
+        g = self._get_next_gym_info()
+        if not g:
+            await self.message.channel.send("🏆 Você já tem todas as 8 insígnias de Kanto. Rumo à Liga!")
+            return
+
+        # encontra o menor step que leve até a cidade alvo (na trilha principal)
+        step_txt = ""
+        try:
+            res = (
+                self.supabase.table("routes")
+                .select("location_from,location_to,step")
+                .eq("region", self.player.region)
+                .eq("is_mainline", True)
+                .eq("location_to", g["city"])
+                .order("step")
+                .limit(1)
+                .execute()
+            )
+            rows = res.data or []
+            if rows and rows[0].get("step") is not None:
+                step_txt = f" — Passo **{rows[0]['step']}**"
+        except Exception:
+            step_txt = ""
+
+        await self.message.channel.send(
+            f"👉 **Próximo ginásio:** **{g['leader']}** em **{slug_to_title(str(g['city']))}** "
+            f"(Insígnia {g['badge_no']}: {g['badge_name']}){step_txt}."
+        )
+
+    async def _send_all_mainline_steps(self):
+        """
+        Envia uma lista ordenada (passo -> destino) da trilha principal,
+        para o treinador não se perder.
+        """
+        try:
+            res = (
+                self.supabase.table("routes")
+                .select("location_from,location_to,step")
+                .eq("region", self.player.region)
+                .eq("is_mainline", True)
+                .not_.is_("step", "null")
+                .order("step")
+                .execute()
+            )
+            rows = res.data or []
+            if not rows:
+                await self.message.channel.send("Não encontrei passos principais cadastrados.")
+                return
+
+            # lista enxuta: "Passo N — Destino"
+            lines = []
+            for r in rows:
+                to_name = slug_to_title(r.get("location_to"))
+                lines.append(f"**Passo {int(r['step'])}** — {to_name}")
+            text = "\n".join(lines[:100])  # proteção: evita estourar embed/limite
+            embed = discord.Embed(
+                title="\U0001F9FE\uFE0F  Todos os Passos da História (Mainline)",
+                description=text,
+                color=discord.Color.dark_teal(),
+            )
+            await self.message.channel.send(embed=embed)
+
+        except Exception as e:
+            await self.message.channel.send(f"Falha ao listar passos principais: `{e}`")
+
+    # ------------ select / botões ------------
 
     def _rebuild_select(self):
         # remove select anterior, se houver
@@ -177,7 +296,7 @@ class TravelViewSafe(discord.ui.View):
             options.append(
                 discord.SelectOption(
                     label=f"{idx}. {label}",
-                    value=to_slug,
+                    value=str(to_slug),
                     description=desc[:100] if desc else None
                 )
             )
@@ -203,15 +322,16 @@ class TravelViewSafe(discord.ui.View):
 
     def _rebuild_action_buttons(self):
         # limpa botões antigos
-        for b in [self._btn_heal, self._btn_wild, self._btn_fish, self._btn_surf]:
+        for b in [self._btn_heal, self._btn_wild, self._btn_fish, self._btn_surf, self._btn_gym, self._btn_help]:
             if b and b in self.children:
                 self.remove_item(b)
         self._btn_heal = self._btn_wild = self._btn_fish = self._btn_surf = None
+        self._btn_gym = self._btn_help = None
 
         # decide o que habilitar
         loc = self._loc_info or {}
         ltype = (loc.get("type") or "").lower()  # city/route/dungeon
-        has_shop = bool(loc.get("has_shop"))     # proxy p/ "centro" (pode trocar depois por has_center)
+        has_shop = bool(loc.get("has_shop"))     # proxy p/ "centro" (pode trocar por has_center)
         meta = loc.get("metadata") or {}
         if isinstance(meta, str):
             try:
@@ -223,21 +343,21 @@ class TravelViewSafe(discord.ui.View):
         can_wild = (ltype in ("route", "dungeon")) or bool(meta.get("grass"))
         can_fish = bool(meta.get("fishing"))
         can_surf = bool(meta.get("surf"))
+        has_gym_here = self._has_gym_here()
 
-        # cria botões
+        # === botões existentes (curar / wild / pesca / surf) ===
         if can_heal:
-            self._btn_heal = discord.ui.Button(label="🏥 Curar", style=discord.ButtonStyle.success)
+            self._btn_heal = discord.ui.Button(label="\U0001F3E5 Curar", style=discord.ButtonStyle.success)
             async def heal_cb(inter: discord.Interaction):
                 if inter.user.id != self.player.user_id:
                     return await inter.response.send_message("Ação não é sua.", ephemeral=True)
                 await inter.response.defer()
-                # aqui você pode chamar sua lógica real; por enquanto feedback
                 await self.message.channel.send("Seus Pokémon foram curados no Centro Pokémon!")
             self._btn_heal.callback = heal_cb
             self.add_item(self._btn_heal)
 
         if can_wild:
-            self._btn_wild = discord.ui.Button(label="🌿 Wild Area", style=discord.ButtonStyle.primary)
+            self._btn_wild = discord.ui.Button(label="\U0001F33F Wild Area", style=discord.ButtonStyle.primary)
             async def wild_cb(inter: discord.Interaction):
                 if inter.user.id != self.player.user_id:
                     return await inter.response.send_message("Ação não é sua.", ephemeral=True)
@@ -247,7 +367,7 @@ class TravelViewSafe(discord.ui.View):
             self.add_item(self._btn_wild)
 
         if can_fish:
-            self._btn_fish = discord.ui.Button(label="🎣 Pescar", style=discord.ButtonStyle.secondary)
+            self._btn_fish = discord.ui.Button(label="\U0001F3A3 Pescar", style=discord.ButtonStyle.secondary)
             async def fish_cb(inter: discord.Interaction):
                 if inter.user.id != self.player.user_id:
                     return await inter.response.send_message("Ação não é sua.", ephemeral=True)
@@ -257,7 +377,7 @@ class TravelViewSafe(discord.ui.View):
             self.add_item(self._btn_fish)
 
         if can_surf:
-            self._btn_surf = discord.ui.Button(label="🌊 Surf", style=discord.ButtonStyle.secondary)
+            self._btn_surf = discord.ui.Button(label="\U0001F30A Surf", style=discord.ButtonStyle.secondary)
             async def surf_cb(inter: discord.Interaction):
                 if inter.user.id != self.player.user_id:
                     return await inter.response.send_message("Ação não é sua.", ephemeral=True)
@@ -265,6 +385,72 @@ class TravelViewSafe(discord.ui.View):
                 await self.message.channel.send("Você saiu surfando! (placeholder)")
             self._btn_surf.callback = surf_cb
             self.add_item(self._btn_surf)
+
+        # === 🏆 Botão do Líder do Ginásio (só em cidades com ginásio) ===
+        if has_gym_here:
+            # resolve info do líder baseado na cidade atual
+            city_slug = (loc.get("location_api_name") or self.player.location_api_name)
+            leader = None
+            badge_no = None
+            badge_name = None
+            for g in GYM_ORDER_KANTO:
+                if g["city"] == city_slug:
+                    leader, badge_no, badge_name = g["leader"], g["badge_no"], g["badge_name"]
+                    break
+
+            label = "🏆 Líder do Ginásio" if leader is None else f"🏆 Desafiar {leader}"
+            self._btn_gym = discord.ui.Button(label=label, style=discord.ButtonStyle.danger)
+
+            async def gym_cb(inter: discord.Interaction):
+                if inter.user.id != self.player.user_id:
+                    return await inter.response.send_message("Ação não é sua.", ephemeral=True)
+                await inter.response.defer()
+                if leader:
+                    await self.message.channel.send(
+                        f"🏆 Você desafia **{leader}** em **{slug_to_title(str(city_slug))}** "
+                        f"(Insígnia {badge_no}: {badge_name}). (placeholder de batalha)"
+                    )
+                else:
+                    await self.message.channel.send("Esta cidade não tem líder mapeado ainda.")
+            self._btn_gym.callback = gym_cb
+            self.add_item(self._btn_gym)
+
+        # === ❓ Help Travel (menu de ajuda de viagem) ===
+        self._btn_help = discord.ui.Button(label="❓ Help Travel", style=discord.ButtonStyle.secondary)
+        async def help_cb(inter: discord.Interaction):
+            if inter.user.id != self.player.user_id:
+                return await inter.response.send_message("Ação não é sua.", ephemeral=True)
+            # mini-menu com 2 botões
+            view = discord.ui.View(timeout=60)
+
+            btn_next_gym = discord.ui.Button(label="👉 Próximo Ginásio", style=discord.ButtonStyle.primary)
+            btn_all_steps = discord.ui.Button(label="🧭 Mostrar Todos os Passos", style=discord.ButtonStyle.success)
+
+            async def next_gym_cb(i2: discord.Interaction):
+                if i2.user.id != self.player.user_id:
+                    return await i2.response.send_message("Ação não é sua.", ephemeral=True)
+                await i2.response.defer()
+                await self._send_next_gym_hint()
+
+            async def all_steps_cb(i2: discord.Interaction):
+                if i2.user.id != self.player.user_id:
+                    return await i2.response.send_message("Ação não é sua.", ephemeral=True)
+                await i2.response.defer()
+                await self._send_all_mainline_steps()
+
+            btn_next_gym.callback = next_gym_cb
+            btn_all_steps.callback = all_steps_cb
+            view.add_item(btn_next_gym)
+            view.add_item(btn_all_steps)
+
+            await inter.response.send_message(
+                "O que você precisa?",
+                view=view,
+                ephemeral=True
+            )
+
+        self._btn_help.callback = help_cb
+        self.add_item(self._btn_help)
 
     # ------------ render ------------
 
@@ -290,7 +476,7 @@ class TravelViewSafe(discord.ui.View):
 
         # monta o embed e elementos
         embed = discord.Embed(
-            title=f"🧭 Viagem — {current_loc_title}",
+            title=f"\U0001F9ED Viagem — {current_loc_title}",
             description=desc or "—",
             color=discord.Color.blurple(),
         )
@@ -314,7 +500,6 @@ class TravelViewSafe(discord.ui.View):
         await self.message.edit(embed=embed, view=self)
 
 
-
 # -----------------------
 # PlayerAdapter mínimo (apenas campos usados aqui)
 class PlayerAdapter:
@@ -324,7 +509,7 @@ class PlayerAdapter:
         self.location_api_name = location_api_name
         # campos opcionais usados por gates:
         self.badges = 0
-        self.flags: list[str] = []
+        self.flags: List[str] = []
 
 
 # -----------------------
@@ -339,18 +524,18 @@ class AdventureCog(commands.Cog):
     async def cmd_travel(self, ctx: commands.Context, *, apenas_principal: Optional[bool] = False):
         """
         Abre o menu de viagem para a location atual do jogador.
+        Integra com a tabela players:
+          - atualiza current_location_name ao viajar
         """
-        # >>> Troque isso pelo seu mecanismo real de player <<<
+        # >>> Substitua por seu mecanismo real de player (fetch do BD) <<<
         player = getattr(ctx, "player", None)
         if player is None:
+            # fallback: cria adaptador mínimo (spawn Pallet/Kanto)
             player = PlayerAdapter(
                 user_id=ctx.author.id,
                 region="Kanto",
                 location_api_name="pallet-town",
             )
-
-        print(f"[AdventureCog:cmd_travel] user={ctx.author.id} region={player.region} "
-              f"loc={player.location_api_name} mainline_only={apenas_principal}", flush=True)
 
         view = TravelViewSafe(self.bot, self.supabase, player, bool(apenas_principal))
         await view.start(ctx)
