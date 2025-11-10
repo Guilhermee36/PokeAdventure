@@ -172,7 +172,17 @@ GYM_ORDERS: Dict[str, List[Dict[str, object]]] = {
         {"city": "anistar-city",   "leader": "Olympia",    "badge_no": 7, "badge_name": "Psychic Badge"},
         {"city": "snowbelle-city", "leader": "Wulfric",    "badge_no": 8, "badge_name": "Iceberg Badge"},
     ],
-    "Alola": [],
+    "Alola": [
+    {"city": "verdant-cavern",                 "leader": "Ilima",     "badge_no": 1, "badge_name": "Trial 1"},
+    {"city": "brooklet-hill",                  "leader": "Lana",      "badge_no": 2, "badge_name": "Trial 2"},
+    {"city": "wela-volcano-park",              "leader": "Kiawe",     "badge_no": 3, "badge_name": "Trial 3"},
+    {"city": "lush-jungle",                     "leader": "Mallow",    "badge_no": 4, "badge_name": "Trial 4"},
+    {"city": "hokulani-observatory",           "leader": "Sophocles", "badge_no": 5, "badge_name": "Trial 5"},
+    {"city": "thrifty-megamart-abandoned-site","leader": "Acerola",   "badge_no": 6, "badge_name": "Trial 6"},
+    {"city": "tapu-village",                    "leader": "Nanu",      "badge_no": 7, "badge_name": "Kahuna Trial"},
+    {"city": "seafolk-village",                 "leader": "Hapu",      "badge_no": 8, "badge_name": "Kahuna Grand Trial"},
+],
+
     "Galar": [
         {"city": "turffield",      "leader": "Milo",       "badge_no": 1, "badge_name": "Grass Badge"},
         {"city": "hulbury",        "leader": "Nessa",      "badge_no": 2, "badge_name": "Water Badge"},
