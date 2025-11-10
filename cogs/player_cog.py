@@ -66,47 +66,50 @@ async def add_pokemon_to_player(
     pokemon_api_name: str,
     level: int = 5,
     captured_at: str = "Início da Jornada",
+    assign_to_party_if_space: bool = True,
 ) -> dict:
     """
-    Lógica mantida: adiciona Pokémon ao jogador, respeitando party (<=6),
-    shiny roll 1/4096, stats calculados, moves iniciais e gênero.
+    Adiciona Pokémon ao jogador.
+    Por padrão tenta alocar na PARTY (slot livre 1–6). Em caso de conflito (unique/23505),
+    faz fallback automático para a BOX (party_position = None).
     """
     supabase = get_supabase_client()
 
-    # Quantos Pokémon já estão na party (1-6)?
-    try:
-        count_response = (
-            supabase.table("player_pokemon")
-            .select("id", count="exact")
-            .eq("player_id", player_id)
-            .filter("party_position", "not.is", "null")
-            .execute()
-        )
-        pokemon_count_in_party = count_response.count
-    except Exception as e:
-        return {"success": False, "error": f"Erro ao contar Pokémon: {e}"}
+    # 1) Descobrir slot preferido (se houver)
+    preferred_slot = None
+    if assign_to_party_if_space:
+        try:
+            occ = (
+                supabase.table("player_pokemon")
+                .select("party_position")
+                .eq("player_id", player_id)
+                .filter("party_position", "not.is", "null")
+                .execute()
+            ).data or []
+            occupied = {int(r["party_position"]) for r in occ if r.get("party_position") is not None}
+            # primeiro slot livre de 1..6
+            for s in range(1, 7):
+                if s not in occupied:
+                    preferred_slot = s
+                    break
+        except Exception as e:
+            # Se falhar a leitura, não impede o insert; apenas não vamos usar slot preferido.
+            preferred_slot = None
 
-    party_position = None
-    is_going_to_box = True
-    if pokemon_count_in_party < 6:
-        party_position = pokemon_count_in_party + 1
-        is_going_to_box = False
-
+    # 2) Dados da PokeAPI
     poke_data = await pokeapi.get_pokemon_data(pokemon_api_name)
     if not poke_data:
         return {"success": False, "error": f"Pokémon '{pokemon_api_name}' não encontrado na API."}
 
-    is_shiny = random.randint(1, 4096) == 1
+    is_shiny = (random.randint(1, 4096) == 1)
     calculated_stats = pokeapi.calculate_stats_for_level(poke_data["stats"], level)
     initial_moves = pokeapi.get_initial_moves(poke_data, level)
 
-    # Gênero e XP inicial (mantido)
+    # 3) Espécie / XP inicial / Gênero
     gender_ratio = -1
     starting_xp = 0
-
     base_species_name = poke_data.get("species", {}).get("name") or pokemon_api_name
     species_data = await pokeapi.get_pokemon_species_data(base_species_name)
-
     if species_data:
         gender_ratio = species_data.get("gender_rate", -1)
         if "growth_rate" in species_data and level > 1:
@@ -119,34 +122,53 @@ async def add_pokemon_to_player(
     if gender_ratio != -1:
         gender = "female" if random.randint(1, 8) <= gender_ratio else "male"
 
-    new_pokemon_data = {
-        "player_id": player_id,
-        "pokemon_api_name": pokemon_api_name,
-        "pokemon_pokedex_id": poke_data["id"],
-        "nickname": pokemon_api_name.capitalize(),
-        "captured_at_location": captured_at,
-        "is_shiny": is_shiny,
-        "party_position": party_position,
-        "current_level": level,
-        "current_hp": calculated_stats["max_hp"],
-        "current_xp": starting_xp,
-        "moves": initial_moves,
-        "gender": gender,
-        "happiness": 70,
-        **calculated_stats,
-    }
+    # 4) Montar payload base
+    def payload(slot_value):
+        return {
+            "player_id": player_id,
+            "pokemon_api_name": pokemon_api_name,
+            "pokemon_pokedex_id": poke_data["id"],
+            "nickname": pokemon_api_name.capitalize(),
+            "captured_at_location": captured_at,
+            "is_shiny": is_shiny,
+            "party_position": slot_value,  # None = Box
+            "current_level": level,
+            "current_hp": calculated_stats["max_hp"],
+            "current_xp": starting_xp,
+            "moves": initial_moves,
+            "gender": gender,
+            "happiness": 70,
+            **calculated_stats,
+        }
 
+    # 5) Tentar inserir (priorizando PARTY se preferred_slot existir)
+    first_try_slot = preferred_slot  # None = Box direto
     try:
-        insert_response = supabase.table("player_pokemon").insert(new_pokemon_data).execute()
-        if insert_response.data:
-            if is_going_to_box:
-                success_message = "Pokémon adicionado com sucesso e enviado para a Box (seu time está cheio)!"
+        insert_resp = supabase.table("player_pokemon").insert(payload(first_try_slot)).execute()
+        if insert_resp.data:
+            if first_try_slot is None:
+                msg = "Pokémon adicionado com sucesso e enviado para a Box!"
             else:
-                success_message = f"Pokémon adicionado com sucesso na posição {party_position}!"
-            return {"success": True, "message": success_message, "data": insert_response.data[0]}
-        else:
-            return {"success": False, "error": "Falha ao inserir o Pokémon no banco de dados."}
+                msg = f"Pokémon adicionado com sucesso na posição {first_try_slot}!"
+            return {"success": True, "message": msg, "data": insert_resp.data[0]}
+        return {"success": False, "error": "Falha ao inserir o Pokémon no banco de dados."}
     except Exception as e:
+        err_txt = str(e)
+        # Se falhou por conflito de UNIQUE/duplicidade de slot, faz fallback para a BOX
+        is_unique_conflict = ("23505" in err_txt) or ("duplicate key value violates unique constraint" in err_txt) or ("unique_party_position" in err_txt)
+        if first_try_slot is not None and is_unique_conflict:
+            try:
+                insert_resp = supabase.table("player_pokemon").insert(payload(None)).execute()
+                if insert_resp.data:
+                    return {
+                        "success": True,
+                        "message": f"Party ocupada/conflitante. Pokémon adicionado com sucesso na Box!",
+                        "data": insert_resp.data[0],
+                    }
+                return {"success": False, "error": "Falha ao inserir na Box após conflito de party."}
+            except Exception as e2:
+                return {"success": False, "error": f"Erro no banco ao tentar fallback para Box: {e2}"}
+        # Outro erro qualquer
         return {"success": False, "error": f"Erro no banco de dados: {e}"}
 
 # ===============================================
