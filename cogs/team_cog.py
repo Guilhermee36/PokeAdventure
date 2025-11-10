@@ -145,11 +145,13 @@ class TeamCog(commands.Cog):
 
     def _swap_or_move(self, user_id: int, src_id: str, dest_slot: int) -> str:
         """
-        MOVE/SWAP seguro:
-        - Se destino ocupado: SWAP (source <-> destino) usando NULL temporário.
-        - Sempre limpa duplicatas do slot de destino (dados "sujos").
+        MOVE/SWAP seguro entre posições da PARTY (1..6):
+        • Se destino estiver ocupado → SWAP real (source <-> destino) usando NULL temporário.
+        • Se destino estiver vazio → MOVE simples.
+        Observação importante: buscamos o ocupante do destino ANTES de qualquer limpeza,
+        para não mandar o ocupante pra Box por engano.
         """
-        # slot atual do source
+        # 1) slot atual do source
         src_row = (
             self.supabase.table("player_pokemon")
             .select("id,party_position")
@@ -167,14 +169,7 @@ class TeamCog(commands.Cog):
         if src_slot == dest_slot:
             return "Esse Pokémon já está nesse slot."
 
-        # garanta que NÃO há duplicatas no slot destino (qualquer outro que, por bug, também esteja lá)
-        self.supabase.table("player_pokemon").update({"party_position": None}) \
-            .eq("player_id", user_id) \
-            .eq("party_position", dest_slot) \
-            .neq("id", src_id) \
-            .execute()
-
-        # agora ver se ainda existe um "destinatário" legítimo (após limpeza, no máximo 0..1)
+        # 2) BUSCA primeiro o ocupante do destino (se houver) — sem limpar nada ainda
         dst_row = (
             self.supabase.table("player_pokemon")
             .select("id,party_position")
@@ -185,19 +180,35 @@ class TeamCog(commands.Cog):
         ).data or []
 
         if dst_row:
-            # SWAP com NULL temporário
+            # ---- SWAP clássico usando NULL temporário ----
             dst_id = dst_row[0]["id"]
-            # a) source -> NULL
+
+            # a) source -> NULL (Box temporária)
             self.supabase.table("player_pokemon").update({"party_position": None}).eq("id", src_id).execute()
-            # b) dest -> src_slot
+
+            # b) destino -> slot original do source
             self.supabase.table("player_pokemon").update({"party_position": src_slot}).eq("id", dst_id).execute()
-            # c) source (NULL) -> dest_slot
+
+            # c) source (que está em NULL) -> slot destino
             self.supabase.table("player_pokemon").update({"party_position": dest_slot}).eq("id", src_id).execute()
+
+            # d) limpeza defensiva de duplicatas residuais nos dois slots (se houver dados "sujos")
+            self.supabase.table("player_pokemon").update({"party_position": None}) \
+                .eq("player_id", user_id).eq("party_position", dest_slot).neq("id", src_id).execute()
+            self.supabase.table("player_pokemon").update({"party_position": None}) \
+                .eq("player_id", user_id).eq("party_position", src_slot).neq("id", dst_id).execute()
+
             return f"✅ Slots trocados: #{src_slot} ↔ #{dest_slot}."
         else:
-            # MOVE simples
+            # ---- MOVE simples: destino vazio ----
             self.supabase.table("player_pokemon").update({"party_position": dest_slot}).eq("id", src_id).execute()
+
+            # limpeza defensiva de duplicatas no slot destino (exclui o próprio src_id)
+            self.supabase.table("player_pokemon").update({"party_position": None}) \
+                .eq("player_id", user_id).eq("party_position", dest_slot).neq("id", src_id).execute()
+
             return f"✅ Pokémon movido para o slot #{dest_slot}."
+
         
     def _move_from_box_to_party(self, user_id: int, box_mon_id: str, dest_slot: int) -> str:
         """
