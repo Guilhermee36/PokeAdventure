@@ -507,42 +507,35 @@ class PlayerCog(commands.Cog):
     # NOVOS COMANDOS
     # ============================
 
-    @commands.command(name="setregion")
-    async def cmd_setregion(self, ctx: commands.Context, *, region: str):
-        """
-        Define/atualiza a região do jogador e aplica o spawn correspondente.
-        Uso: !setregion Paldea
-        """
-        region = (region or "").strip().title()
-        if region not in VALID_REGIONS:
-            await ctx.send(f"Região inválida. Escolha uma de: {', '.join(VALID_REGIONS)}")
-            return
+@commands.command(name="setregion")
+async def cmd_setregion(self, ctx: commands.Context, *, region: str):
+    """
+    Define/atualiza a região do jogador e aplica o spawn correspondente.
+    Uso: !setregion Paldea
+    """
+    # 1) Exigir perfil existente (evita inserir sem trainer_name)
+    if not await self.player_exists(ctx.author.id):
+        await ctx.send("Você precisa iniciar sua jornada com `!start` antes de mudar a região.")
+        return
 
-        spawn = _spawn_for_region(region)
-        try:
-            # upsert simples
-            (
-                self.supabase.table("players")
-                .upsert(
-                    {
-                        "discord_id": ctx.author.id,
-                        "current_region": region,
-                        "current_location_name": spawn,
-                    },
-                    on_conflict="discord_id",
-                )
-                .execute()
-            )
-            # garante update se já existia
-            (
-                self.supabase.table("players")
-                .update({"current_region": region, "current_location_name": spawn})
-                .eq("discord_id", ctx.author.id)
-                .execute()
-            )
-            await ctx.send(f"Região definida para **{region}**. Spawn em **{spawn.replace('-', ' ').title()}**.")
-        except Exception as e:
-            await ctx.send(f"Falha ao definir região: `{e}`")
+    region = (region or "").strip().title()
+    if region not in VALID_REGIONS:
+        await ctx.send(f"Região inválida. Escolha uma de: {', '.join(VALID_REGIONS)}")
+        return
+
+    spawn = _spawn_for_region(region)
+    try:
+        # Somente UPDATE, já que o perfil existe
+        (
+            self.supabase.table("players")
+            .update({"current_region": region, "current_location_name": spawn})
+            .eq("discord_id", ctx.author.id)
+            .execute()
+        )
+        await ctx.send(f"Região definida para **{region}**. Spawn em **{spawn.replace('-', ' ').title()}**.")
+    except Exception as e:
+        await ctx.send(f"Falha ao definir região: `{e}`")
+
 
     @commands.command(name="whereami", aliases=["onde"])
     async def cmd_whereami(self, ctx: commands.Context):
