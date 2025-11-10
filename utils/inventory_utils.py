@@ -6,41 +6,18 @@ from supabase import Client
 PLAYER_ITEMS_TABLE = "player_items"     # player_id, item_id, quantity
 ITEMS_TABLE = "items"                   # id, name
 POKEBALL_NAME = "Pokeball"              # conforme sua tabela items (seed usa "Pokeball")
-POKEBALL_ALIASES = ["pokeball", "poke ball", "poké ball"]  # tolerância de nomes
+POKEBALL_ALIASES = ["Pokeball", "pokeball", "Poke ball", "poke ball", "Poké ball", "poké ball"]
 
 def _get_item_id_by_name(supabase: Client, item_name: str):
-    """
-    Tenta achar o item por name exato; se não achar, tenta por aliases usando ILIKE.
-    Retorna item_id ou None.
-    """
-    # 1) tentativa por name exato (seed costuma ser "Pokeball")
-    it = (supabase.table(ITEMS_TABLE)
-          .select("id")
-          .eq("name", item_name)
-          .limit(1)
-          .execute()).data or []
+    # 1) tenta name exato (sua seed usa "Pokeball")
+    it = (supabase.table(ITEMS_TABLE).select("id").eq("name", item_name).limit(1).execute()).data or []
     if it:
         return it[0]["id"]
-
-    # 2) tentativa por ILIKE (case-insensitive) com o nome solicitado
-    it = (supabase.table(ITEMS_TABLE)
-          .select("id")
-          .ilike("name", item_name)
-          .limit(1)
-          .execute()).data or []
-    if it:
-        return it[0]["id"]
-
-    # 3) fallback: tentar aliases comuns
+    # 2) tenta por aliases com ILIKE
     for alias in POKEBALL_ALIASES:
-        it = (supabase.table(ITEMS_TABLE)
-              .select("id")
-              .ilike("name", alias)
-              .limit(1)
-              .execute()).data or []
+        it = (supabase.table(ITEMS_TABLE).select("id").ilike("name", alias).limit(1).execute()).data or []
         if it:
             return it[0]["id"]
-
     return None
 
 async def get_item_qty(supabase: Client, player_id: int, item_name: str) -> int:

@@ -403,67 +403,108 @@ class BattleCog(commands.Cog):
         return {"name": "tackle", "type": "normal", "power": 40, "category": "physical"}
 
     async def _on_player_capture(self, interaction: discord.Interaction, st: BattleState):
-        await interaction.response.defer()
-
-        qty = await get_item_qty(self.supabase, st.user_id, POKEBALL_NAME)
-        if qty <= 0:
-            await self._send_log(interaction, "Você não tem Poké Bolas suficientes!")
-            emb = self._build_embed(st)
-            await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
-            return
-
-        ok = await consume_item(self.supabase, st.user_id, POKEBALL_NAME, amount=1)
-        if not ok:
-            await self._send_log(interaction, "Falha ao consumir a Poké Bola. Tente novamente.")
-            emb = self._build_embed(st)
-            await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
-            return
-
-        await self._send_log(interaction, f"Você usou **{POKEBALL_NAME}**. ({qty-1} restantes)")
-        chance = battle_utils.capture_chance(
-            base_capture_rate=st.opp_capture_rate,
-            wild_max_hp=int(st.opp_stats.get("max_hp", 1)),
-            wild_current_hp=st.opp_hp,
-            ball_mult=1.0, status_mult=1.0,
-        )
-        success = battle_utils.attempt_capture(st.rng, chance)
-        await self._send_log(interaction, "Jogou uma Poké Ball…")
-        if success:
-            await self._send_log(interaction, "🎉 Capturou com sucesso!")
-            if add_pokemon_to_player:
-                try:
-                    res = await add_pokemon_to_player(
-                        player_id=st.user_id,
-                        pokemon_api_name=st.opp_name,
-                        level=st.opp_level,
-                        captured_at="Batalha selvagem",
-                    )
-                    if not res or not res.get("success"):
-                        await self._send_log(interaction, f"(Aviso) Falha ao registrar captura: {res and res.get('error')}")
-                except Exception as e:
-                    await self._send_log(interaction, f"(Aviso) Erro ao salvar captura: {e}")
-            else:
-                await self._send_log(interaction, "(Aviso) Handler de captura não encontrado. Ajuste o import de add_pokemon_to_player.")
-            emb = self._build_embed(st)
-            await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=None)
-            await self._end_battle(interaction, st, escaped=False, finished=True)
-        else:
-            await self._send_log(interaction, "A Poké Ball balançou… mas o Pokémon escapou!")
-            opp_move = await self._choose_ai_move(st)
-            await self._resolve_attack(attacker="opp", st=st, move=opp_move, ctx_or_inter=interaction)
-            st.turn += 1
-            emb = self._build_embed(st)
-            await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
-
-    async def _end_battle(self, interaction: discord.Interaction, st: BattleState, escaped: bool, finished: bool = False):
-        self.active_battles.pop(st.user_id, None)
-        if escaped:
-            await self._send_log(interaction, "Você fugiu da batalha.")
+    # sempre dar defer para liberar o botão e permitir followups
         try:
-            emb = self._build_embed(st)
-            await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=None)
+            await interaction.response.defer()
         except Exception:
             pass
+
+        try:
+            # 0) sanity check: batalha ainda ativa?
+            if st.user_id not in self.active_battles:
+                return await self._send_log(interaction, "Esta batalha não está mais ativa.")
+
+            # 1) checar quantidade
+            try:
+                qty = await get_item_qty(self.supabase, st.user_id, POKEBALL_NAME)
+            except Exception as inv_e:
+                # se o util lançar erro, mostre
+                return await self._send_log(interaction, f"❌ Erro ao checar inventário: `{inv_e}`")
+
+            if qty <= 0:
+                await self._send_log(interaction, "❌ Você não tem Pokébolas suficientes.")
+                # re-render para manter a view
+                emb = self._build_embed(st)
+                try:
+                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
+                except Exception:
+                    pass
+                return
+
+            # 2) consumir 1 pokebola (sempre consome quando arremessa)
+            try:
+                ok_consume = await consume_item(self.supabase, st.user_id, POKEBALL_NAME, amount=1)
+            except Exception as inv_e:
+                return await self._send_log(interaction, f"❌ Erro ao consumir item: `{inv_e}`")
+
+            if not ok_consume:
+                await self._send_log(interaction, "❌ Falha ao consumir a Pokébola (quantidade insuficiente).")
+                emb = self._build_embed(st)
+                try:
+                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
+                except Exception:
+                    pass
+                return
+
+            await self._send_log(interaction, f"🎯 Você arremessou uma **{POKEBALL_NAME}**. ({qty-1} restantes)")
+
+            # 3) cálculo de captura
+            chance = battle_utils.capture_chance(
+                base_capture_rate=st.opp_capture_rate,
+                wild_max_hp=int(st.opp_stats.get("max_hp", 1)),
+                wild_current_hp=st.opp_hp,
+                ball_mult=1.0, status_mult=1.0,
+            )
+            success = battle_utils.attempt_capture(st.rng, chance)
+            await self._send_log(interaction, "A Pokébola balançou…")
+
+            if success:
+                await self._send_log(interaction, "✨ **Captura bem-sucedida!**")
+                if add_pokemon_to_player:
+                    try:
+                        res = await add_pokemon_to_player(
+                            player_id=st.user_id,
+                            pokemon_api_name=st.opp_name,
+                            level=st.opp_level,
+                            captured_at="Batalha selvagem",
+                            assign_to_party_if_space=True,  # usa sua lógica nova (com fallback pra BOX)
+                        )
+                        if not res or not res.get("success"):
+                            await self._send_log(interaction, f"(Aviso) Falha ao registrar captura: {res and res.get('error')}")
+                    except Exception as save_e:
+                        await self._send_log(interaction, f"(Aviso) Erro ao salvar captura: `{save_e}`")
+
+                # finaliza a batalha
+                emb = self._build_embed(st)
+                try:
+                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=None)
+                except Exception:
+                    pass
+                await self._end_battle(interaction, st, escaped=False, finished=True)
+                return
+            else:
+                await self._send_log(interaction, "😓 O Pokémon escapou!")
+
+                # turno do oponente após tentativa
+                opp_move = await self._choose_ai_move(st)
+                await self._resolve_attack(attacker="opp", st=st, move=opp_move, ctx_or_inter=interaction)
+
+                st.turn += 1
+                emb = self._build_embed(st)
+                try:
+                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
+                except Exception:
+                    pass
+
+        except Exception as e:
+            # captura QUALQUER erro e mostra para o usuário
+            await self._send_log(interaction, f"❌ Erro ao tentar capturar: `{e}`")
+            # tenta re-renderizar para não deixar a view travada
+            try:
+                emb = self._build_embed(st)
+                await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
+            except Exception:
+                pass
 
     # ---------- comandos públicos ----------
     @commands.command(name="battle")
