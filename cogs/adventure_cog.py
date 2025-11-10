@@ -4,6 +4,7 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 import os
+import json
 import discord
 from discord.ext import commands
 
@@ -15,6 +16,47 @@ MAX_DEST_PER_PAGE = 6
 
 def slug_to_title(slug: str) -> str:
     return slug.replace("-", " ").title() if slug else "—"
+
+
+def _friendly_flag_name(flag: str) -> str:
+    """Mapeia algumas flags para nomes mais bonitos no UI."""
+    f = (flag or "").strip().lower()
+    aliases = {
+        "hm_surf": "Surf",
+        "hm_dive": "Dive",
+        "hm_strength": "Strength",
+        "hm_rock_climb": "Rock Climb",
+        "hm_waterfall": "Waterfall",
+        "flash": "Flash",
+        "tea_event": "Chá (Tea)",
+        "clear_snorlax": "Snorlax liberado",
+    }
+    return aliases.get(f, flag)
+
+
+def _gate_summary(gate: dict) -> str:
+    """Gera um texto curto com os requisitos/bloqueios do gate para mostrar na lista de destinos."""
+    if not gate:
+        return ""
+    chunks = []
+    # badges
+    if gate.get("requires_badge") is not None:
+        chunks.append(f"{int(gate['requires_badge'])}🏅")
+    # requires_flags
+    rfs = gate.get("requires_flags") or []
+    if rfs:
+        nice = ", ".join(_friendly_flag_name(x) for x in rfs)
+        chunks.append(f"🔑 {nice}")
+    # locked_until
+    if gate.get("locked_until"):
+        chunks.append(f"🔓 {_friendly_flag_name(str(gate['locked_until']))}")
+    # blocked_by
+    if gate.get("blocked_by"):
+        chunks.append(f"⛔ {str(gate['blocked_by']).title()}")
+    # recommended (não bloqueia)
+    if gate.get("recommended"):
+        chunks.append(f"💡 Recom.: {_friendly_flag_name(str(gate['recommended']))}")
+    return " · Gate: " + " | ".join(chunks) if chunks else ""
 
 
 class TravelViewSafe(discord.ui.View):
@@ -75,43 +117,37 @@ class TravelViewSafe(discord.ui.View):
             try:
                 self._region_img_filename = f"{region_name}.webp"
                 file = discord.File(img_path, filename=self._region_img_filename)
-            except Exception as e:
-                print(f"[TravelViewSafe:start][WARN] falha ao anexar imagem: {e}", flush=True)
+            except Exception:
+                file = None
+
+        # carrega destinos + UI inicial
+        await self._reload_destinations()
 
         embed = discord.Embed(
             title=f"\U0001F9ED Viagem — {slug_to_title(self.player.location_api_name)}",
-            description="Carregando destinos.",
+            description="Carregando destinos…",
             color=discord.Color.blurple(),
         )
-        if self._region_img_filename:
-            embed.set_image(url=f"attachment://{self._region_img_filename}")
+        self.message = await ctx.send(embed=embed, file=file) if file else await ctx.send(embed=embed)
+        await self._render()
 
-        self.message = await ctx.send(embed=embed, view=self, file=file) if file else await ctx.send(embed=embed, view=self)
-
-        try:
-            await self._reload_destinations()
-            await self._render()
-        except Exception as e:
-            print(f"[TravelViewSafe:start][ERROR] {e}", flush=True)
-            await self._show_error(e)
-
-    async def _refresh_player_from_db(self, discord_id: int):
-        """Carrega badges/flags/region/location do BD para refletir os gates corretamente."""
+    async def _refresh_player_from_db(self, user_id: int):
         try:
             res = (
                 self.supabase.table("players")
                 .select("current_region,current_location_name,badges,flags")
-                .eq("discord_id", discord_id)
+                .eq("discord_id", user_id)
                 .limit(1)
                 .execute()
             )
             rows = res.data or []
-            if rows:
-                row = rows[0]
-                self.player.region = row.get("current_region", self.player.region)
-                self.player.location_api_name = row.get("current_location_name", self.player.location_api_name)
-                self.player.badges = row.get("badges", 0) or 0
-                self.player.flags = row.get("flags", []) or []
+            if not rows:
+                return
+            row = rows[0]
+            self.player.region = row.get("current_region") or "Kanto"
+            self.player.location_api_name = row.get("current_location_name") or self.player.location_api_name
+            self.player.badges = row.get("badges", 0) or 0
+            self.player.flags = row.get("flags", []) or []
         except Exception as e:
             print(f"[TravelViewSafe:_refresh_player_from_db][WARN] {e}", flush=True)
 
@@ -343,14 +379,15 @@ class TravelViewSafe(discord.ui.View):
         meta = loc.get("metadata") or {}
         if isinstance(meta, str):
             try:
-                import json; meta = json.loads(meta)
+                meta = json.loads(meta)
             except Exception:
                 meta = {}
 
         can_heal = has_shop or ltype == "city"
         can_wild = (ltype in ("route", "dungeon")) or bool(meta.get("grass"))
         can_fish = bool(meta.get("fishing"))
-        can_surf = bool(meta.get("surf"))
+        # Surf: precisa a location permitir E o player ter a flag hm_surf
+        can_surf = bool(meta.get("surf")) and ("hm_surf" in (self.player.flags or []))
         has_gym_here = self._has_gym_here()
 
         # === botões existentes (curar / wild / pesca / surf) ===
@@ -401,7 +438,7 @@ class TravelViewSafe(discord.ui.View):
         async def badges_cb(inter: discord.Interaction):
             if inter.user.id != self.player.user_id:
                 return await inter.response.send_message("Ação não é sua.", ephemeral=True)
-            # Recarrega do BD e atualiza a label (requisito 1)
+            # Recarrega do BD e atualiza a label
             await inter.response.defer()
             await self._refresh_player_from_db(self.player.user_id)
             # Re-render apenas os botões para atualizar a label
@@ -451,7 +488,7 @@ class TravelViewSafe(discord.ui.View):
                 )
                 # Concede 1 insígnia
                 await self._increment_badge()
-                # Atualiza destinos (para liberar gates de 8 insignias) e UI (requisito 2)
+                # Atualiza destinos (para liberar gates de 8 insignias) e UI
                 await self._reload_destinations()
                 self._rebuild_action_buttons()
                 await self._render()
@@ -514,12 +551,8 @@ class TravelViewSafe(discord.ui.View):
                 step = d.get("step")
                 principal = (step is not None)
                 prefix = "🧭" if principal else "🗺️"
-                # (requisito 2) Se tiver gate, mostra um lembrete
                 gate = d.get("gate") or {}
-                gate_txt = ""
-                rb = (gate or {}).get("requires_badge")
-                if rb:
-                    gate_txt = f" · Gate: {rb}🏅"
+                gate_txt = _gate_summary(gate)
                 info = f"— **Passo {step}**{gate_txt}" if principal else f"— Opcional{gate_txt}"
                 lines.append(f"**{idx}. {prefix} {to_name}** {info}")
             desc = "\n".join(lines)
@@ -610,9 +643,115 @@ class AdventureCog(commands.Cog):
             await ctx.send("Você ainda não tem perfil criado. Use `!setregion <Região>` para começar.")
             return
 
-        # instancia a mesma TravelViewSafe da versão anterior:
+        # instancia a view
         view = TravelViewSafe(self.bot, self.supabase, player, bool(apenas_principal))
         await view.start(ctx)
+
+    # ===============================
+    # Comandos de admin / debug (give)
+    # ===============================
+
+    def _fetch_flags(self, user_id: int) -> List[str]:
+        try:
+            res = (
+                self.supabase.table("players")
+                .select("flags")
+                .eq("discord_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            rows = res.data or []
+            flags = (rows[0] or {}).get("flags", []) if rows else []
+            return list(flags or [])
+        except Exception:
+            return []
+
+    def _save_flags(self, user_id: int, flags: List[str]) -> None:
+        # salva único e ordenado (estético)
+        unique = sorted(set(flags))
+        self.supabase.table("players").update({"flags": unique}).eq("discord_id", user_id).execute()
+
+    @commands.command(name="givebadges")
+    async def give_badges(self, ctx: commands.Context, n: int):
+        """Define o número de insígnias (0–8)."""
+        n = max(0, min(8, int(n)))
+        try:
+            self.supabase.table("players").update({"badges": n}).eq("discord_id", ctx.author.id).execute()
+            await ctx.send(f"🏅 Badges agora: **{n}/8**")
+        except Exception as e:
+            await ctx.send(f"Erro ao definir badges: `{e}`")
+
+    @commands.command(name="giveflag")
+    async def give_flag(self, ctx: commands.Context, *, flag: str):
+        """Adiciona uma flag ao jogador (ex.: hm_surf, hm_dive, tea_event, clear_snorlax, flash)."""
+        flag = (flag or "").strip().lower()
+        if not flag:
+            return await ctx.send("Informe a flag. Ex.: `!giveflag hm_surf`")
+        flags = self._fetch_flags(ctx.author.id)
+        if flag in flags:
+            return await ctx.send(f"Flag **{flag}** já está setada.")
+        flags.append(flag)
+        try:
+            self._save_flags(ctx.author.id, flags)
+            await ctx.send(f"✅ Flag **{flag}** concedida.")
+        except Exception as e:
+            await ctx.send(f"Erro ao salvar flag: `{e}`")
+
+    @commands.command(name="delflag")
+    async def del_flag(self, ctx: commands.Context, *, flag: str):
+        """Remove uma flag do jogador."""
+        flag = (flag or "").strip().lower()
+        flags = self._fetch_flags(ctx.author.id)
+        if flag not in flags:
+            return await ctx.send(f"Flag **{flag}** não estava setada.")
+        flags = [f for f in flags if f != flag]
+        try:
+            self._save_flags(ctx.author.id, flags)
+            await ctx.send(f"🗑️ Flag **{flag}** removida.")
+        except Exception as e:
+            await ctx.send(f"Erro ao salvar flag: `{e}`")
+
+    # ===== Atalhos para seus gates atuais =====
+    @commands.command(name="givesurf")
+    async def give_surf(self, ctx): return await self.give_flag(ctx, flag="hm_surf")
+
+    @commands.command(name="givedive")
+    async def give_dive(self, ctx): return await self.give_flag(ctx, flag="hm_dive")
+
+    @commands.command(name="givewaterfall")
+    async def give_waterfall(self, ctx): return await self.give_flag(ctx, flag="hm_waterfall")
+
+    @commands.command(name="givestrength")
+    async def give_strength(self, ctx): return await self.give_flag(ctx, flag="hm_strength")
+
+    @commands.command(name="giverockclimb")
+    async def give_rock_climb(self, ctx): return await self.give_flag(ctx, flag="hm_rock_climb")
+
+    @commands.command(name="giveflash")
+    async def give_flash(self, ctx): return await self.give_flag(ctx, flag="flash")
+
+    @commands.command(name="givetea")
+    async def give_tea(self, ctx): return await self.give_flag(ctx, flag="tea_event")
+
+    @commands.command(name="clearsnorlax")
+    async def clear_snorlax(self, ctx): return await self.give_flag(ctx, flag="clear_snorlax")
+
+    @commands.command(name="kitgates")
+    async def kit_gates(self, ctx):
+        """
+        Dá todos os itens/flags que você listou:
+        - hm_surf, hm_dive, hm_strength, hm_rock_climb, hm_waterfall, flash, tea_event, clear_snorlax
+        """
+        want = {"hm_surf", "hm_dive", "hm_strength", "hm_rock_climb", "hm_waterfall", "flash", "tea_event", "clear_snorlax"}
+        flags = set(self._fetch_flags(ctx.author.id))
+        if want.issubset(flags):
+            return await ctx.send("Você já tem todas as flags do kit.")
+        flags |= want
+        try:
+            self._save_flags(ctx.author.id, list(flags))
+            await ctx.send("🎁 Kit de flags dos gates concedido com sucesso.")
+        except Exception as e:
+            await ctx.send(f"Erro ao salvar flags: `{e}`")
 
 
 async def setup(bot: commands.Bot):

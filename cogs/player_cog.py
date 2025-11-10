@@ -513,11 +513,6 @@ async def cmd_setregion(self, ctx: commands.Context, *, region: str):
     Define/atualiza a região do jogador e aplica o spawn correspondente.
     Uso: !setregion Paldea
     """
-    # 1) Exigir perfil existente (evita inserir sem trainer_name)
-    if not await self.player_exists(ctx.author.id):
-        await ctx.send("Você precisa iniciar sua jornada com `!start` antes de mudar a região.")
-        return
-
     region = (region or "").strip().title()
     if region not in VALID_REGIONS:
         await ctx.send(f"Região inválida. Escolha uma de: {', '.join(VALID_REGIONS)}")
@@ -525,16 +520,41 @@ async def cmd_setregion(self, ctx: commands.Context, *, region: str):
 
     spawn = _spawn_for_region(region)
     try:
-        # Somente UPDATE, já que o perfil existe
-        (
+        # 1) Verifica se já existe jogador
+        res = (
             self.supabase.table("players")
-            .update({"current_region": region, "current_location_name": spawn})
+            .select("discord_id,trainer_name")
             .eq("discord_id", ctx.author.id)
+            .limit(1)
             .execute()
         )
+        rows = res.data or []
+
+        if rows:
+            # 2a) Só atualiza
+            (
+                self.supabase.table("players")
+                .update({"current_region": region, "current_location_name": spawn})
+                .eq("discord_id", ctx.author.id)
+                .execute()
+            )
+        else:
+            # 2b) Cria já com trainer_name para não violar NOT NULL
+            (
+                self.supabase.table("players")
+                .insert({
+                    "discord_id": ctx.author.id,
+                    "trainer_name": ctx.author.display_name,  # fallback seguro
+                    "current_region": region,
+                    "current_location_name": spawn,
+                })
+                .execute()
+            )
+
         await ctx.send(f"Região definida para **{region}**. Spawn em **{spawn.replace('-', ' ').title()}**.")
     except Exception as e:
         await ctx.send(f"Falha ao definir região: `{e}`")
+
 
 
     @commands.command(name="whereami", aliases=["onde"])

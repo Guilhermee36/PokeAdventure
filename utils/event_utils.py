@@ -69,6 +69,7 @@ def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
     if not gate:
         return True
 
+    # 1) badges
     requires_badge = gate.get("requires_badge")
     if requires_badge is not None:
         badges = getattr(player, "badges", 0) or 0
@@ -77,6 +78,7 @@ def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
         if int(badges) < int(requires_badge):
             return False
 
+    # 2) flags obrigatórias
     required_flags = gate.get("requires_flags")
     if required_flags:
         have = set(getattr(player, "flags", []) or [])
@@ -84,7 +86,25 @@ def gate_allows(player: Any, gate: Optional[Dict]) -> bool:
         if not need.issubset(have):
             return False
 
+    # 3) locked_until: exige possuir a flag X para liberar
+    locked_until = gate.get("locked_until")
+    if locked_until:
+        have = set(getattr(player, "flags", []) or [])
+        if locked_until not in have:
+            return False
+
+    # 4) blocked_by: bloqueia enquanto NÃO houver "clear_<blocked_by>"
+    #    ex.: blocked_by: "snorlax" → requer flag "clear_snorlax"
+    blocked_by = gate.get("blocked_by")
+    if blocked_by:
+        have = set(getattr(player, "flags", []) or [])
+        clear_flag = f"clear_{str(blocked_by).strip()}"
+        if clear_flag not in have:
+            return False
+
+    # 5) "recommended" não bloqueia
     return True
+
 
 
 # ==============================================================
