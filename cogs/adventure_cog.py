@@ -393,13 +393,37 @@ class TravelViewSafe(discord.ui.View):
         # === botões existentes (curar / wild / pesca / surf) ===
         if can_heal:
             self._btn_heal = discord.ui.Button(label="\U0001F3E5 Curar", style=discord.ButtonStyle.success)
+
             async def heal_cb(inter: discord.Interaction):
                 if inter.user.id != self.player.user_id:
                     return await inter.response.send_message("Ação não é sua.", ephemeral=True)
                 await inter.response.defer()
-                await self.message.channel.send("Seus Pokémon foram curados no Centro Pokémon!")
+
+                try:
+                    # Busca todos os Pokémon da party do jogador
+                    res = (
+                        self.supabase.table("player_pokemon")
+                        .select("id,max_hp")
+                        .eq("player_id", self.player.user_id)
+                        .not_.is_("party_position", "null")
+                        .execute()
+                    )
+                    rows = res.data or []
+
+                    # Seta current_hp = max_hp para cada um
+                    for r in rows:
+                        self.supabase.table("player_pokemon") \
+                            .update({"current_hp": r["max_hp"]}) \
+                            .eq("id", r["id"]) \
+                            .execute()
+
+                    await self.message.channel.send("🧑‍⚕️ Seus Pokémon foram totalmente curados no Centro Pokémon!")
+                except Exception as e:
+                    await self.message.channel.send(f"Falha ao curar: `{e}`")
+
             self._btn_heal.callback = heal_cb
             self.add_item(self._btn_heal)
+
 
         if can_wild:
             self._btn_wild = discord.ui.Button(label="\U0001F33F Wild Area", style=discord.ButtonStyle.primary)
