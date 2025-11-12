@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import math
 import random
+import types  # <— necessário para SimpleNamespace em _end_battle_from_message
 from typing import Optional, List, Dict, Any, Tuple
 
 import discord
@@ -100,11 +101,33 @@ class BattleCog(commands.Cog):
 
     # ---------- util ----------
     async def _send_log(self, ctx_or_inter, text: str):
+        """
+        Envia mensagem tanto para Context quanto para Interaction.
+        - Context: usa .send
+        - Interaction: se a resposta ainda não foi enviada, usa response.send_message;
+          caso já tenha sido deferida/enviada, usa followup.send
+        """
         try:
-            if hasattr(ctx_or_inter, "send"):
+            # Caso seja um Context tradicional
+            if hasattr(ctx_or_inter, "send") and callable(getattr(ctx_or_inter, "send")):
                 await ctx_or_inter.send(text)
+                return
+
+            # Caso seja uma Interaction
+            inter = ctx_or_inter
+            # interaction.response.is_done() pode não existir no shim → proteger com getattr
+            is_done = False
+            try:
+                is_done = bool(inter.response.is_done())
+            except Exception:
+                # Se não existir/der erro, assumir que já podemos usar followup
+                is_done = True
+
+            if not is_done and hasattr(inter, "response"):
+                await inter.response.send_message(text)
             else:
-                await ctx_or_inter.followup.send(text)
+                # usar followup como padrão seguro
+                await inter.followup.send(text)
         except Exception:
             pass
 
@@ -125,6 +148,59 @@ class BattleCog(commands.Cog):
             }
         except Exception:
             return {"name": move_name, "type": "normal", "power": 40, "damage_class": {"name": "physical"}}
+
+    async def _safely_disable_or_remove_view(self, interaction: discord.Interaction) -> None:
+        """
+        Remove a view da mensagem associada à interação, ignorando NotFound/HTTPException.
+        """
+        # caminho principal: editar a mensagem da interação (se existir)
+        try:
+            if getattr(interaction, "message", None):
+                await interaction.message.edit(view=None)
+                return
+        except (discord.NotFound, discord.HTTPException):
+            pass
+        except Exception:
+            pass
+
+        # fallback: tenta editar a resposta original
+        try:
+            await interaction.edit_original_response(view=None)
+        except (discord.NotFound, discord.HTTPException):
+            pass
+        except Exception:
+            pass
+
+    async def _end_battle_from_message(
+        self,
+        *,
+        message: Optional[discord.Message],
+        st: BattleState,
+        escaped: bool = False,
+        finished: bool = False,
+        reason: Optional[str] = None,
+    ):
+        """
+        Permite encerrar a batalha sem um Interaction real (ex.: on_timeout da View),
+        simulando um objeto mínimo com os atributos que _end_battle usa.
+        """
+        shim = types.SimpleNamespace()
+        shim.message = message
+        shim.channel = getattr(message, "channel", None)
+        shim.response = types.SimpleNamespace(is_done=lambda: True)  # força followup path
+
+        if shim.channel and hasattr(shim.channel, "send"):
+            shim.followup = types.SimpleNamespace(send=shim.channel.send)
+        else:
+            shim.followup = types.SimpleNamespace(send=lambda *a, **k: None)
+
+        await self._end_battle(
+            shim,
+            st,
+            escaped=escaped,
+            finished=finished,
+            reason=reason
+        )
 
     async def _inflate_player_moves(self, mon_row: dict) -> List[Dict[str, Any]]:
         moves = mon_row.get("moves") or []
@@ -180,6 +256,53 @@ class BattleCog(commands.Cog):
         if shiny:
             return data["sprites"].get("front_shiny") or data["sprites"].get("other", {}).get("official-artwork", {}).get("front_shiny")
         return data["sprites"].get("front_default") or data["sprites"].get("other", {}).get("official-artwork", {}).get("front_default")
+
+    async def _end_battle(
+        self,
+        interaction: discord.Interaction,
+        st: BattleState,  # BattleState
+        *,
+        escaped: bool = False,
+        finished: bool = False,
+        reason: Optional[str] = None,
+    ) -> None:
+        """
+        Encerra a batalha de forma idempotente e segura:
+        - evita chamadas duplicadas com st.ended
+        - remove a view da mensagem (se existir), ignorando NotFound/HTTPException
+        - limpa self.active_battles mesmo se algo falhar
+        - dá um feedback final leve ao usuário
+        """
+        # 0) trava idempotência
+        if getattr(st, "ended", False):
+            self.active_battles.pop(st.user_id, None)
+            return
+        st.ended = True
+
+        # 1) tenta remover a view da mensagem original (se ainda existir)
+        try:
+            await self._safely_disable_or_remove_view(interaction)
+        except Exception:
+            pass
+
+        # 2) limpa o estado (idempotente)
+        try:
+            self.active_battles.pop(st.user_id, None)
+        except Exception:
+            pass
+
+        # 3) feedback final
+        try:
+            msg = "Batalha encerrada."
+            if escaped:
+                msg = "Você fugiu. A batalha foi encerrada."
+            elif finished:
+                msg = "Batalha finalizada!"
+            if reason:
+                msg += f" ({reason})"
+            await self._send_log(interaction, msg)
+        except Exception:
+            pass
 
     def _hp_texts(self, st: BattleState) -> Tuple[str, str]:
         php = int(st.player_mon.get("current_hp") or 1)
@@ -258,61 +381,61 @@ class BattleCog(commands.Cog):
         return emb
 
     # ---------- Views ----------
+        # ---------- Views ----------
     class BattleView(discord.ui.View):
-        def __init__(self, cog: "BattleCog", st: BattleState):
-            super().__init__(timeout=120)
+        def __init__(self, cog: "BattleCog", st: "BattleState"):
+            # timeout de 5 min (inatividade)
+            super().__init__(timeout=300)
             self.cog = cog
             self.st = st
+            self.message: Optional[discord.Message] = None  # setado após enviar/editar
 
         async def interaction_check(self, interaction: discord.Interaction) -> bool:
-            if interaction.user.id != self.st.user_id:
-                await interaction.response.send_message("Esta batalha não é sua.", ephemeral=True)
+            # só o dono da batalha pode clicar
+            try:
+                if int(interaction.user.id) != int(self.st.user_id):
+                    await interaction.response.send_message("Essa batalha não é sua. 😉", ephemeral=True)
+                    return False
+            except Exception:
+                pass
+            # se já acabou, ignora cliques
+            if getattr(self.st, "ended", False):
+                try:
+                    await interaction.response.send_message("A batalha já foi encerrada.", ephemeral=True)
+                except Exception:
+                    pass
                 return False
             return True
 
-        @discord.ui.button(label="Lutar", style=discord.ButtonStyle.danger)
-        async def fight(self, interaction: discord.Interaction, button: discord.ui.Button):
-            mv_view = discord.ui.View(timeout=90)
-            for mv in (self.st.player_moves or [])[:4]:
-                label = f"{mv['name'].capitalize()} • {mv['type'].upper()}"
-                b = discord.ui.Button(label=label, style=discord.ButtonStyle.primary)
-                async def _mkcb(i: discord.Interaction, move=mv):
-                    await self.cog._on_player_move(i, self.st, move)
-                b.callback = _mkcb
-                mv_view.add_item(b)
+        async def on_timeout(self) -> None:
+            # 5 min sem interação → foge por inatividade
+            if getattr(self.st, "ended", False):
+                return
+            # tenta remover a view da mensagem (se existir)
+            try:
+                if self.message:
+                    await self.message.edit(view=None)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+            except Exception:
+                pass
 
-            back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.secondary)
-            async def _back(i: discord.Interaction):
-                await i.response.edit_message(view=BattleCog.BattleView(self.cog, self.st))
-            back.callback = _back
-            mv_view.add_item(back)
-
-            await interaction.response.edit_message(view=mv_view)
-
-        @discord.ui.button(label="Trocar", style=discord.ButtonStyle.primary)
-        async def switch(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.send_message("Troca com Select da party chega na v2 (com custo de turno).", ephemeral=True)
-
-        @discord.ui.button(label="Bolsa", style=discord.ButtonStyle.success)
-        async def bag(self, interaction: discord.Interaction, button: discord.ui.Button):
-            v = discord.ui.View(timeout=60)
-            ball_btn = discord.ui.Button(label="Poké Ball", style=discord.ButtonStyle.success, emoji="🧶")
-            async def _cap(i: discord.Interaction):
-                await self.cog._on_player_capture(i, self.st)
-            ball_btn.callback = _cap
-
-            back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.secondary)
-            async def _back(i: discord.Interaction):
-                await i.response.edit_message(view=BattleCog.BattleView(self.cog, self.st))
-            back.callback = _back
-
-            v.add_item(ball_btn); v.add_item(back)
-            await interaction.response.edit_message(view=v)
-
-        @discord.ui.button(label="Fugir", style=discord.ButtonStyle.secondary)
-        async def run(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.defer()
-            await self.cog._end_battle(interaction, self.st, escaped=True)
+            # encerra usando o fluxo central (sem Interaction real)
+            try:
+                await self.cog._end_battle_from_message(
+                    message=self.message,
+                    st=self.st,
+                    escaped=True,
+                    reason="inatividade (5 min)"
+                )
+            except Exception:
+                # fallback ultra defensivo
+                try:
+                    self.cog.active_battles.pop(self.st.user_id, None)
+                    if self.message and self.message.channel:
+                        await self.message.channel.send("O Pokémon se cansou de esperar e fugiu (inatividade: 5 min).")
+                except Exception:
+                    pass
 
     # ---------- Turno ----------
     async def _on_player_move(self, interaction: discord.Interaction, st: BattleState, move: Dict[str, Any]):
@@ -403,7 +526,7 @@ class BattleCog(commands.Cog):
         return {"name": "tackle", "type": "normal", "power": 40, "category": "physical"}
 
     async def _on_player_capture(self, interaction: discord.Interaction, st: BattleState):
-    # sempre dar defer para liberar o botão e permitir followups
+        # sempre dar defer para liberar o botão e permitir followups
         try:
             await interaction.response.defer()
         except Exception:
