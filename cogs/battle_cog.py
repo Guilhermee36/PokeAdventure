@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import math
 import random
-import types  # <— necessário para SimpleNamespace em _end_battle_from_message
 from typing import Optional, List, Dict, Any, Tuple
 
 import discord
@@ -64,6 +63,9 @@ class BattleState:
         self.opp_capture_rate: int = 255
         self.opp_sprite_url: Optional[str] = None
 
+        # Flag de término
+        self.ended: bool = False
+
 # =========================
 # Helpers BD
 # =========================
@@ -101,33 +103,11 @@ class BattleCog(commands.Cog):
 
     # ---------- util ----------
     async def _send_log(self, ctx_or_inter, text: str):
-        """
-        Envia mensagem tanto para Context quanto para Interaction.
-        - Context: usa .send
-        - Interaction: se a resposta ainda não foi enviada, usa response.send_message;
-          caso já tenha sido deferida/enviada, usa followup.send
-        """
         try:
-            # Caso seja um Context tradicional
-            if hasattr(ctx_or_inter, "send") and callable(getattr(ctx_or_inter, "send")):
+            if hasattr(ctx_or_inter, "send"):
                 await ctx_or_inter.send(text)
-                return
-
-            # Caso seja uma Interaction
-            inter = ctx_or_inter
-            # interaction.response.is_done() pode não existir no shim → proteger com getattr
-            is_done = False
-            try:
-                is_done = bool(inter.response.is_done())
-            except Exception:
-                # Se não existir/der erro, assumir que já podemos usar followup
-                is_done = True
-
-            if not is_done and hasattr(inter, "response"):
-                await inter.response.send_message(text)
             else:
-                # usar followup como padrão seguro
-                await inter.followup.send(text)
+                await ctx_or_inter.followup.send(text)
         except Exception:
             pass
 
@@ -148,59 +128,6 @@ class BattleCog(commands.Cog):
             }
         except Exception:
             return {"name": move_name, "type": "normal", "power": 40, "damage_class": {"name": "physical"}}
-
-    async def _safely_disable_or_remove_view(self, interaction: discord.Interaction) -> None:
-        """
-        Remove a view da mensagem associada à interação, ignorando NotFound/HTTPException.
-        """
-        # caminho principal: editar a mensagem da interação (se existir)
-        try:
-            if getattr(interaction, "message", None):
-                await interaction.message.edit(view=None)
-                return
-        except (discord.NotFound, discord.HTTPException):
-            pass
-        except Exception:
-            pass
-
-        # fallback: tenta editar a resposta original
-        try:
-            await interaction.edit_original_response(view=None)
-        except (discord.NotFound, discord.HTTPException):
-            pass
-        except Exception:
-            pass
-
-    async def _end_battle_from_message(
-        self,
-        *,
-        message: Optional[discord.Message],
-        st: BattleState,
-        escaped: bool = False,
-        finished: bool = False,
-        reason: Optional[str] = None,
-    ):
-        """
-        Permite encerrar a batalha sem um Interaction real (ex.: on_timeout da View),
-        simulando um objeto mínimo com os atributos que _end_battle usa.
-        """
-        shim = types.SimpleNamespace()
-        shim.message = message
-        shim.channel = getattr(message, "channel", None)
-        shim.response = types.SimpleNamespace(is_done=lambda: True)  # força followup path
-
-        if shim.channel and hasattr(shim.channel, "send"):
-            shim.followup = types.SimpleNamespace(send=shim.channel.send)
-        else:
-            shim.followup = types.SimpleNamespace(send=lambda *a, **k: None)
-
-        await self._end_battle(
-            shim,
-            st,
-            escaped=escaped,
-            finished=finished,
-            reason=reason
-        )
 
     async def _inflate_player_moves(self, mon_row: dict) -> List[Dict[str, Any]]:
         moves = mon_row.get("moves") or []
@@ -256,53 +183,6 @@ class BattleCog(commands.Cog):
         if shiny:
             return data["sprites"].get("front_shiny") or data["sprites"].get("other", {}).get("official-artwork", {}).get("front_shiny")
         return data["sprites"].get("front_default") or data["sprites"].get("other", {}).get("official-artwork", {}).get("front_default")
-
-    async def _end_battle(
-        self,
-        interaction: discord.Interaction,
-        st: BattleState,  # BattleState
-        *,
-        escaped: bool = False,
-        finished: bool = False,
-        reason: Optional[str] = None,
-    ) -> None:
-        """
-        Encerra a batalha de forma idempotente e segura:
-        - evita chamadas duplicadas com st.ended
-        - remove a view da mensagem (se existir), ignorando NotFound/HTTPException
-        - limpa self.active_battles mesmo se algo falhar
-        - dá um feedback final leve ao usuário
-        """
-        # 0) trava idempotência
-        if getattr(st, "ended", False):
-            self.active_battles.pop(st.user_id, None)
-            return
-        st.ended = True
-
-        # 1) tenta remover a view da mensagem original (se ainda existir)
-        try:
-            await self._safely_disable_or_remove_view(interaction)
-        except Exception:
-            pass
-
-        # 2) limpa o estado (idempotente)
-        try:
-            self.active_battles.pop(st.user_id, None)
-        except Exception:
-            pass
-
-        # 3) feedback final
-        try:
-            msg = "Batalha encerrada."
-            if escaped:
-                msg = "Você fugiu. A batalha foi encerrada."
-            elif finished:
-                msg = "Batalha finalizada!"
-            if reason:
-                msg += f" ({reason})"
-            await self._send_log(interaction, msg)
-        except Exception:
-            pass
 
     def _hp_texts(self, st: BattleState) -> Tuple[str, str]:
         php = int(st.player_mon.get("current_hp") or 1)
@@ -381,7 +261,6 @@ class BattleCog(commands.Cog):
         return emb
 
     # ---------- Views ----------
-        # ---------- Views ----------
     class BattleView(discord.ui.View):
         def __init__(self, cog: "BattleCog", st: "BattleState"):
             # timeout de 5 min (inatividade)
@@ -389,6 +268,60 @@ class BattleCog(commands.Cog):
             self.cog = cog
             self.st = st
             self.message: Optional[discord.Message] = None  # setado após enviar/editar
+
+            # Menu de golpes (dinâmico conforme st.player_moves)
+            options = []
+            for mv in (st.player_moves or [])[:4]:
+                label = mv.get("name", "mov")
+                power = mv.get("power", 0)
+                options.append(discord.SelectOption(
+                    label=label.capitalize(),
+                    description=f"Poder {power}",
+                    value=label
+                ))
+
+            if not options:
+                options = [discord.SelectOption(label="Tackle", description="Poder 40", value="tackle")]
+
+            self.move_select = discord.ui.Select(placeholder="Escolha um Golpe", min_values=1, max_values=1, options=options)
+            self.move_select.callback = self.on_select_move  # type: ignore
+            self.add_item(self.move_select)
+
+            # Botão Capturar
+            @discord.ui.button(label="🎯 Capturar", style=discord.ButtonStyle.primary, custom_id="battle_capture_btn")
+            async def _capture_btn(btn, interaction: discord.Interaction):
+                self.message = interaction.message
+                await self.cog._on_player_capture(interaction, self.st)
+
+            # Botão Fugir
+            @discord.ui.button(label="🏃 Fugir", style=discord.ButtonStyle.secondary, custom_id="battle_run_btn")
+            async def _run_btn(btn, interaction: discord.Interaction):
+                self.message = interaction.message
+                try:
+                    await interaction.response.defer()
+                except Exception:
+                    pass
+                # encerra como fuga
+                await self.cog._end_battle(interaction, self.st, escaped=True, finished=False, reason="você fugiu")
+
+        async def on_select_move(self, interaction: discord.Interaction):
+            # encontra o move no snapshot
+            self.message = interaction.message
+            try:
+                mv_name = self.move_select.values[0]
+            except Exception:
+                mv_name = None
+
+            move: Optional[Dict[str, Any]] = None
+            for m in self.st.player_moves:
+                if str(m.get("name")).lower() == str(mv_name).lower():
+                    move = m
+                    break
+
+            if not move:
+                move = {"name": "tackle", "type": "normal", "power": 40, "category": "physical"}
+
+            await self.cog._on_player_move(interaction, self.st, move)
 
         async def interaction_check(self, interaction: discord.Interaction) -> bool:
             # só o dono da batalha pode clicar
@@ -437,6 +370,72 @@ class BattleCog(commands.Cog):
                 except Exception:
                     pass
 
+    # ---------- Encerramento centralizado ----------
+    async def _end_battle(self, ctx_or_inter, st: BattleState, escaped: bool, finished: bool, reason: Optional[str] = None):
+        """Encerra a batalha limpando estado, removendo a view e emitindo mensagem final."""
+        if getattr(st, "ended", False):
+            return
+        st.ended = True
+        self.active_battles.pop(st.user_id, None)
+
+        # tenta remover interações da mensagem
+        try:
+            # quando chamado via Interaction, conseguimos editar a mensagem original
+            if hasattr(ctx_or_inter, "message") and ctx_or_inter.message:
+                try:
+                    # remove a view
+                    await ctx_or_inter.edit_original_response(view=None)
+                except Exception:
+                    # fallback
+                    try:
+                        await ctx_or_inter.message.edit(view=None)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # mensagem final
+        try:
+            if escaped and not finished:
+                msg = "🏃 A batalha terminou: você fugiu."
+            elif escaped and finished:
+                msg = "✨ A batalha terminou: captura realizada."
+            elif not escaped and finished:
+                msg = "🏆 A batalha terminou: você venceu!"
+            else:
+                msg = "A batalha foi encerrada."
+
+            if reason:
+                msg += f" (Motivo: {reason})"
+
+            await self._send_log(ctx_or_inter, msg)
+        except Exception:
+            pass
+
+    async def _end_battle_from_message(self, message: Optional[discord.Message], st: BattleState, escaped: bool, reason: Optional[str] = None):
+        """Versão para timeout, quando temos apenas a mensagem."""
+        if getattr(st, "ended", False):
+            return
+        st.ended = True
+        self.active_battles.pop(st.user_id, None)
+
+        # remove a view da mensagem se possível
+        try:
+            if message:
+                await message.edit(view=None)
+        except Exception:
+            pass
+
+        # envia aviso no canal
+        try:
+            if message and message.channel:
+                base = "🏃 A batalha terminou: o Pokémon fugiu por esperar demais."
+                if reason:
+                    base += f" (Motivo: {reason})"
+                await message.channel.send(base)
+        except Exception:
+            pass
+
     # ---------- Turno ----------
     async def _on_player_move(self, interaction: discord.Interaction, st: BattleState, move: Dict[str, Any]):
         await interaction.response.defer()
@@ -471,7 +470,9 @@ class BattleCog(commands.Cog):
             return
         else:
             st.turn += 1
-            await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
+            view = BattleCog.BattleView(self, st)
+            view.message = interaction.message
+            await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=view)
 
     async def _resolve_attack(self, attacker: str, st: BattleState, move: Dict[str, Any], ctx_or_inter) -> Tuple[int, Optional[str]]:
         if attacker == "player":
@@ -549,7 +550,9 @@ class BattleCog(commands.Cog):
                 # re-render para manter a view
                 emb = self._build_embed(st)
                 try:
-                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
+                    view = BattleCog.BattleView(self, st)
+                    view.message = interaction.message
+                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=view)
                 except Exception:
                     pass
                 return
@@ -564,7 +567,9 @@ class BattleCog(commands.Cog):
                 await self._send_log(interaction, "❌ Falha ao consumir a Pokébola (quantidade insuficiente).")
                 emb = self._build_embed(st)
                 try:
-                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
+                    view = BattleCog.BattleView(self, st)
+                    view.message = interaction.message
+                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=view)
                 except Exception:
                     pass
                 return
@@ -603,7 +608,7 @@ class BattleCog(commands.Cog):
                     await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=None)
                 except Exception:
                     pass
-                await self._end_battle(interaction, st, escaped=False, finished=True)
+                await self._end_battle(interaction, st, escaped=True, finished=True)  # escaped=True + finished=True = captura
                 return
             else:
                 await self._send_log(interaction, "😓 O Pokémon escapou!")
@@ -615,7 +620,9 @@ class BattleCog(commands.Cog):
                 st.turn += 1
                 emb = self._build_embed(st)
                 try:
-                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
+                    view = BattleCog.BattleView(self, st)
+                    view.message = interaction.message
+                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=view)
                 except Exception:
                     pass
 
@@ -625,7 +632,9 @@ class BattleCog(commands.Cog):
             # tenta re-renderizar para não deixar a view travada
             try:
                 emb = self._build_embed(st)
-                await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=BattleCog.BattleView(self, st))
+                view = BattleCog.BattleView(self, st)
+                view.message = interaction.message
+                await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=view)
             except Exception:
                 pass
 
@@ -651,8 +660,9 @@ class BattleCog(commands.Cog):
 
         await ctx.send(f"Um selvagem **{st.opp_name.capitalize()}** Lv.{st.opp_level} apareceu!")
         embed = self._build_embed(st)
-        await ctx.send(embed=embed, view=BattleCog.BattleView(self, st))
-
+        view = BattleCog.BattleView(self, st)
+        msg = await ctx.send(embed=embed, view=view)
+        view.message = msg
 
 # -------- setup --------
 async def setup(bot: commands.Bot):
