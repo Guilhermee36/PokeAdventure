@@ -10,12 +10,12 @@ import discord
 from discord.ext import commands
 from supabase import create_client, Client
 
-# Utils do projeto (ajuste os imports para seus caminhos reais)
+# Utils do projeto (ajuste conforme seus caminhos)
 import utils.pokeapi_service as pokeapi  # get_pokemon_data, get_pokemon_species_data, get_total_xp_for_level, calculate_stats_for_level
-from utils import battle_utils  # regras puras (calc_damage, hp_bar, capture_chance, attempt_capture, describe_effectiveness)
+from utils import battle_utils  # calc_damage, hp_bar, capture_chance, attempt_capture, describe_effectiveness
 from utils.inventory_utils import get_item_qty, consume_item, POKEBALL_NAME
 
-# Se tiver um helper para salvar captura no BD:
+# Se tiver helper de captura persistida:
 try:
     from cogs.player_cog import add_pokemon_to_player
 except Exception:
@@ -69,12 +69,13 @@ class BattleState:
 # Helpers BD
 # =========================
 def fetch_active_party_mon(supabase: Client, player_id: int) -> Optional[dict]:
+    """Pega o primeiro Pokémon da party (menor party_position)."""
     try:
         res = (
             supabase.table("player_pokemon")
             .select("*")
             .eq("player_id", player_id)
-            .not_.is_("party_position", "null")
+            .filter("party_position", "not.is", "null")
             .order("party_position")
             .limit(1)
             .execute()
@@ -84,6 +85,22 @@ def fetch_active_party_mon(supabase: Client, player_id: int) -> Optional[dict]:
     except Exception as e:
         print(f"[Battle] erro party: {e}", flush=True)
         return None
+
+def fetch_party_list(supabase: Client, player_id: int) -> List[dict]:
+    """Lista completa da party (1..6), ordenada, com campos úteis."""
+    try:
+        res = (
+            supabase.table("player_pokemon")
+            .select("*")
+            .eq("player_id", player_id)
+            .filter("party_position", "not.is", "null")
+            .order("party_position", desc=False)
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        print(f"[Battle] erro listar party: {e}", flush=True)
+        return []
 
 def update_player_mon_hp(supabase: Client, mon_id: str, new_hp: int):
     try:
@@ -112,6 +129,9 @@ class BattleCog(commands.Cog):
 
     async def _load_player_active_mon(self, user_id: int) -> Optional[dict]:
         return fetch_active_party_mon(self.supabase, user_id)
+
+    async def _get_party(self, user_id: int) -> List[dict]:
+        return fetch_party_list(self.supabase, user_id)
 
     async def _load_move_info(self, move_name: str) -> Dict[str, Any]:
         try:
@@ -239,7 +259,7 @@ class BattleCog(commands.Cog):
         player_hp_line, opp_hp_line = self._hp_texts(st)
         emb = discord.Embed(
             title=f"⚔️ Batalha Selvagem — Turno {st.turn}",
-            description="Escolha **Lutar**, **Capturar** ou **Fugir** abaixo.",
+            description="Escolha **Lutar**, **Capturar**, **Trocar** ou **Fugir** abaixo.",
             color=discord.Color.blurple()
         )
         emb.add_field(
@@ -263,8 +283,8 @@ class BattleCog(commands.Cog):
     class BattleView(discord.ui.View):
         """
         View com:
-         - 4 botões de ataque (linha 1)
-         - 2 botões: Capturar / Fugir (linha 2)
+         - 4 botões de ataque (linha 0)
+         - 3 botões: Capturar / Trocar / Fugir (linha 1)
         Timeout: 300s -> fuga por inatividade
         """
         def __init__(self, cog: "BattleCog", st: "BattleState"):
@@ -273,12 +293,11 @@ class BattleCog(commands.Cog):
             self.st = st
             self.message: Optional[discord.Message] = None
 
-            # === Linha 1: quatro botões de ataque ===
-            # Mapeia até 4 golpes do snapshot. Se tiver menos, preenche com botões desabilitados.
+            # === Linha 0: quatro botões de ataque ===
             moves = (st.player_moves or [])[:4]
             labels = [m.get("name", "tackle") for m in moves]
             while len(labels) < 4:
-                labels.append(None)  # placeholders desabilitados
+                labels.append(None)
 
             for idx in range(4):
                 lbl = labels[idx]
@@ -289,26 +308,19 @@ class BattleCog(commands.Cog):
                     disabled=(lbl is None),
                     custom_id=f"battle_atk_{idx}"
                 )
-                # callback específico para cada índice
                 btn.callback = self._make_attack_callback(idx, lbl)
                 self.add_item(btn)
 
-            # === Linha 2: Capturar / Fugir ===
-            cap_btn = discord.ui.Button(
-                label="🎯 Capturar",
-                style=discord.ButtonStyle.primary,
-                row=1,
-                custom_id="battle_capture_btn"
-            )
+            # === Linha 1: Capturar / Trocar / Fugir ===
+            cap_btn = discord.ui.Button(label="🎯 Capturar", style=discord.ButtonStyle.primary, row=1, custom_id="battle_capture_btn")
             cap_btn.callback = self._on_capture_clicked
             self.add_item(cap_btn)
 
-            run_btn = discord.ui.Button(
-                label="🏃 Fugir",
-                style=discord.ButtonStyle.danger,
-                row=1,
-                custom_id="battle_run_btn"
-            )
+            swap_btn = discord.ui.Button(label="🔄 Trocar Pokémon", style=discord.ButtonStyle.secondary, row=1, custom_id="battle_swap_btn")
+            swap_btn.callback = self._on_swap_clicked
+            self.add_item(swap_btn)
+
+            run_btn = discord.ui.Button(label="🏃 Fugir", style=discord.ButtonStyle.danger, row=1, custom_id="battle_run_btn")
             run_btn.callback = self._on_run_clicked
             self.add_item(run_btn)
 
@@ -318,7 +330,6 @@ class BattleCog(commands.Cog):
                 self.message = interaction.message
                 if not await self._pre_check(interaction):
                     return
-                # pega o move do índice; se inválido, usa tackle
                 move: Optional[Dict[str, Any]] = None
                 if label:
                     for m in self.st.player_moves:
@@ -327,7 +338,6 @@ class BattleCog(commands.Cog):
                             break
                 if not move:
                     move = {"name": "tackle", "type": "normal", "power": 40, "category": "physical"}
-
                 await self.cog._on_player_move(interaction, self.st, move)
             return _cb
 
@@ -336,6 +346,13 @@ class BattleCog(commands.Cog):
             if not await self._pre_check(interaction):
                 return
             await self.cog._on_player_capture(interaction, self.st)
+
+        async def _on_swap_clicked(self, interaction: discord.Interaction):
+            self.message = interaction.message
+            if not await self._pre_check(interaction):
+                return
+            # Troca voluntária -> consome turno (oponente ataca depois)
+            await self.cog._prompt_switch(interaction, self.st, forced=False)
 
         async def _on_run_clicked(self, interaction: discord.Interaction):
             self.message = interaction.message
@@ -348,14 +365,12 @@ class BattleCog(commands.Cog):
             await self.cog._end_battle(interaction, self.st, escaped=True, finished=False, reason="você fugiu")
 
         async def _pre_check(self, interaction: discord.Interaction) -> bool:
-            # só o dono da batalha pode clicar
             try:
                 if int(interaction.user.id) != int(self.st.user_id):
                     await interaction.response.send_message("Essa batalha não é sua. 😉", ephemeral=True)
                     return False
             except Exception:
                 pass
-            # se já acabou, ignora cliques
             if getattr(self.st, "ended", False):
                 try:
                     await interaction.response.send_message("A batalha já foi encerrada.", ephemeral=True)
@@ -365,7 +380,6 @@ class BattleCog(commands.Cog):
             return True
 
         async def on_timeout(self) -> None:
-            # 5 min sem interação → foge por inatividade
             if getattr(self.st, "ended", False):
                 return
             try:
@@ -392,13 +406,11 @@ class BattleCog(commands.Cog):
 
     # ---------- Encerramento centralizado ----------
     async def _end_battle(self, ctx_or_inter, st: BattleState, escaped: bool, finished: bool, reason: Optional[str] = None):
-        """Encerra a batalha limpando estado, removendo a view e emitindo mensagem final."""
         if getattr(st, "ended", False):
             return
         st.ended = True
         self.active_battles.pop(st.user_id, None)
 
-        # remove view
         try:
             if hasattr(ctx_or_inter, "message") and ctx_or_inter.message:
                 try:
@@ -411,7 +423,6 @@ class BattleCog(commands.Cog):
         except Exception:
             pass
 
-        # mensagem final
         try:
             if escaped and not finished:
                 msg = "🏃 A batalha terminou: você fugiu."
@@ -420,7 +431,7 @@ class BattleCog(commands.Cog):
             elif not escaped and finished:
                 msg = "🏆 A batalha terminou: você venceu!"
             else:
-                msg = "A batalha foi encerrada."
+                msg = "💀 A batalha terminou: você perdeu."
             if reason:
                 msg += f" (Motivo: {reason})"
             await self._send_log(ctx_or_inter, msg)
@@ -428,7 +439,6 @@ class BattleCog(commands.Cog):
             pass
 
     async def _end_battle_from_message(self, message: Optional[discord.Message], st: BattleState, escaped: bool, reason: Optional[str] = None):
-        """Versão para timeout, quando temos apenas a mensagem."""
         if getattr(st, "ended", False):
             return
         st.ended = True
@@ -449,9 +459,140 @@ class BattleCog(commands.Cog):
         except Exception:
             pass
 
+    # ---------- Troca de Pokémon ----------
+    async def _prompt_switch(self, interaction: discord.Interaction, st: BattleState, forced: bool):
+        """
+        Abre uma UI de troca. Se forced=True (por desmaio), sem botão cancelar.
+        Se a troca for voluntária (forced=False), consome 1 turno: após trocar, o oponente ataca.
+        """
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+
+        party = await self._get_party(st.user_id)
+        # elegíveis: vivos e diferentes do atual
+        candidates = [r for r in party if r.get("id") != st.player_mon.get("id") and int(r.get("current_hp", 0)) > 0]
+
+        if not candidates:
+            if forced:
+                # sem opções -> derrota
+                emb = self._build_embed(st)
+                try:
+                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=None)
+                except Exception:
+                    pass
+                await self._end_battle(interaction, st, escaped=False, finished=False, reason="sem Pokémon disponíveis")
+                return
+            else:
+                await self._send_log(interaction, "Não há Pokémon saudáveis na party para trocar.")
+                # re-render view atual
+                emb = self._build_embed(st)
+                view = BattleCog.BattleView(self, st)
+                view.message = interaction.message
+                try:
+                    await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=view)
+                except Exception:
+                    pass
+                return
+
+        # monta select
+        options: List[discord.SelectOption] = []
+        for r in candidates:
+            name = (r.get("nickname") or r.get("pokemon_api_name") or "").capitalize()
+            lvl = r.get("current_level", 1)
+            hp = r.get("current_hp", 0)
+            mhp = r.get("max_hp", 1)
+            options.append(discord.SelectOption(label=f"{name} (Lv.{lvl}) — {hp}/{mhp} HP", value=str(r["id"]))[:])
+
+        class SwapSelect(discord.ui.Select):
+            def __init__(self, opts, owner_id: int):
+                super().__init__(placeholder="Escolha o substituto…", min_values=1, max_values=1, options=opts)
+                self.value_id: Optional[str] = None
+                self.owner_id = owner_id
+            async def callback(self, inter: discord.Interaction):
+                if inter.user.id != self.owner_id:
+                    return await inter.response.send_message("Não é sua interface.", ephemeral=True)
+                self.value_id = self.values[0]
+                await inter.response.defer()
+
+        sel = SwapSelect(options, st.user_id)
+        btn_confirm = discord.ui.Button(label="Confirmar troca", style=discord.ButtonStyle.success)
+        view = discord.ui.View(timeout=120)
+        view.add_item(sel)
+        view.add_item(btn_confirm)
+        if not forced:
+            btn_cancel = discord.ui.Button(label="Cancelar", style=discord.ButtonStyle.secondary)
+            view.add_item(btn_cancel)
+
+            async def on_cancel(inter: discord.Interaction):
+                if inter.user.id != st.user_id:
+                    return await inter.response.send_message("Não é sua interface.", ephemeral=True)
+                emb = self._build_embed(st)
+                v = BattleCog.BattleView(self, st)
+                v.message = interaction.message
+                await inter.response.edit_message(embed=emb, view=v)
+            btn_cancel.callback = on_cancel
+
+        async def on_confirm(inter: discord.Interaction):
+            if inter.user.id != st.user_id:
+                return await inter.response.send_message("Não é sua interface.", ephemeral=True)
+            if not sel.value_id:
+                return await inter.response.send_message("Escolha um Pokémon para trocar.", ephemeral=True)
+
+            # aplica a troca no snapshot
+            target = next((r for r in candidates if str(r["id"]) == sel.value_id), None)
+            if not target or int(target.get("current_hp", 0)) <= 0:
+                return await inter.response.send_message("Esse Pokémon não pode entrar.", ephemeral=True)
+
+            # snapshot do novo ativo
+            st.player_mon = dict(target)
+            st.player_sprite_url = await self._get_sprite_url(target.get("pokemon_api_name"), shiny=bool(target.get("is_shiny")))
+            pkmn_data = await pokeapi.get_pokemon_data(target.get("pokemon_api_name"))
+            st.player_types = [t["type"]["name"] for t in (pkmn_data or {}).get("types", [])] if pkmn_data else []
+            st.player_moves = await self._inflate_player_moves(target)
+
+            await inter.response.edit_message(content="🔄 **Troca realizada!**", view=None)
+            await self._send_log(inter, f"Você enviou **{(target.get('nickname') or target.get('pokemon_api_name')).capitalize()}** para o campo!")
+
+            emb = self._build_embed(st)
+
+            if not forced:
+                # troca voluntária consome turno -> oponente ataca
+                opp_move = await self._choose_ai_move(st)
+                await self._resolve_attack(attacker="opp", st=st, move=opp_move, ctx_or_inter=inter)
+
+                # verifica derrota após o golpe
+                if int(st.player_mon["current_hp"]) <= 0:
+                    await self._send_log(inter, f"Seu {st.player_mon.get('pokemon_api_name').capitalize()} desmaiou após a troca!")
+                    # tenta nova escolha forçada; se não tiver, derrota
+                    await self._prompt_switch(inter, st, forced=True)
+                    return
+
+                st.turn += 1  # consumiu turno
+                emb = self._build_embed(st)
+
+            # re-render batalha com a nova view
+            v = BattleCog.BattleView(self, st)
+            v.message = interaction.message
+            try:
+                await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=v)
+            except Exception:
+                pass
+
+        btn_confirm.callback = on_confirm
+
+        # mostra UI de seleção
+        try:
+            await interaction.followup.edit_message(message_id=interaction.message.id, content="Escolha o substituto:", embed=None, view=view)
+        except Exception:
+            try:
+                await interaction.channel.send("Escolha o substituto:", view=view)
+            except Exception:
+                pass
+
     # ---------- Turno ----------
     async def _on_player_move(self, interaction: discord.Interaction, st: BattleState, move: Dict[str, Any]):
-        # travar UI até terminar o turno
         try:
             await interaction.response.defer()
         except Exception:
@@ -469,34 +610,34 @@ class BattleCog(commands.Cog):
             opp_move = await self._choose_ai_move(st)
             await self._resolve_attack(attacker="opp", st=st, move=opp_move, ctx_or_inter=interaction)
 
-        ended = False
+        # Checa condições
         if st.opp_hp <= 0:
             await self._send_log(interaction, f"{st.opp_name.capitalize()} desmaiou!")
             reward_xp, _ = await self._reward_on_win(st)
             await self._send_log(interaction, f"Você ganhou **{reward_xp} XP** e +{HAPPINESS_GAIN_ON_WIN} de amizade.")
-            ended = True
-
-        if int(st.player_mon["current_hp"]) <= 0:
-            await self._send_log(interaction, "Seu Pokémon desmaiou!")
-            ended = True
-
-        emb = self._build_embed(st)
-        if ended:
-            # fecha visual e encerra
+            emb = self._build_embed(st)
             try:
                 await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=None)
             except Exception:
                 pass
             await self._end_battle(interaction, st, escaped=False, finished=True)
             return
-        else:
-            st.turn += 1
-            view = BattleCog.BattleView(self, st)
-            view.message = interaction.message
-            try:
-                await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=view)
-            except Exception:
-                pass
+
+        if int(st.player_mon["current_hp"]) <= 0:
+            # Player desmaiou -> tentar troca forçada (sem custo de turno imediato)
+            await self._send_log(interaction, "Seu Pokémon desmaiou! Escolha um substituto.")
+            await self._prompt_switch(interaction, st, forced=True)
+            return
+
+        # segue batalha
+        st.turn += 1
+        emb = self._build_embed(st)
+        view = BattleCog.BattleView(self, st)
+        view.message = interaction.message
+        try:
+            await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=view)
+        except Exception:
+            pass
 
     async def _resolve_attack(self, attacker: str, st: BattleState, move: Dict[str, Any], ctx_or_inter) -> Tuple[int, Optional[str]]:
         if attacker == "player":
@@ -560,7 +701,7 @@ class BattleCog(commands.Cog):
             if st.user_id not in self.active_battles:
                 return await self._send_log(interaction, "Esta batalha não está mais ativa.")
 
-            # 1) checar quantidade
+            # inventário
             try:
                 qty = await get_item_qty(self.supabase, st.user_id, POKEBALL_NAME)
             except Exception as inv_e:
@@ -577,14 +718,12 @@ class BattleCog(commands.Cog):
                     pass
                 return
 
-            # 2) consumir 1 pokebola
             try:
                 ok_consume = await consume_item(self.supabase, st.user_id, POKEBALL_NAME, amount=1)
             except Exception as inv_e:
                 return await self._send_log(interaction, f"❌ Erro ao consumir item: `{inv_e}`")
-
             if not ok_consume:
-                await self._send_log(interaction, "❌ Falha ao consumir a Pokébola (quantidade insuficiente).")
+                await self._send_log(interaction, "❌ Falha ao consumir a Pokébola.")
                 emb = self._build_embed(st)
                 view = BattleCog.BattleView(self, st)
                 view.message = interaction.message
@@ -596,7 +735,7 @@ class BattleCog(commands.Cog):
 
             await self._send_log(interaction, f"🎯 Você arremessou uma **{POKEBALL_NAME}**. ({qty-1} restantes)")
 
-            # 3) cálculo de captura
+            # captura
             chance = battle_utils.capture_chance(
                 base_capture_rate=st.opp_capture_rate,
                 wild_max_hp=int(st.opp_stats.get("max_hp", 1)),
@@ -627,13 +766,19 @@ class BattleCog(commands.Cog):
                     await interaction.followup.edit_message(message_id=interaction.message.id, embed=emb, view=None)
                 except Exception:
                     pass
-                await self._end_battle(interaction, st, escaped=True, finished=True)  # captura
+                await self._end_battle(interaction, st, escaped=True, finished=True)
                 return
 
-            # falhou a captura → oponente ataca
+            # falhou a captura -> oponente ataca
             await self._send_log(interaction, "😓 O Pokémon escapou!")
             opp_move = await self._choose_ai_move(st)
             await self._resolve_attack(attacker="opp", st=st, move=opp_move, ctx_or_inter=interaction)
+
+            # se desmaiou após o contra-ataque, aciona troca forçada
+            if int(st.player_mon["current_hp"]) <= 0:
+                await self._send_log(interaction, "Seu Pokémon desmaiou! Escolha um substituto.")
+                await self._prompt_switch(interaction, st, forced=True)
+                return
 
             st.turn += 1
             emb = self._build_embed(st)
