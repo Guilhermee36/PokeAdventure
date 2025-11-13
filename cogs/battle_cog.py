@@ -133,6 +133,50 @@ class BattleCog(commands.Cog):
     async def _get_party(self, user_id: int) -> List[dict]:
         return fetch_party_list(self.supabase, user_id)
 
+    async def _can_start_wild_battle(self, user_id: int, limit: int = 10) -> tuple[bool, int]:
+        """
+        Lê e incrementa o contador de batalhas selvagens do jogador.
+        Retorna (pode_começar, novo_valor_do_contador).
+
+        Se der erro de BD, não bloqueia a batalha (falha "aberta").
+        """
+        try:
+            res = (
+                self.supabase.table("players")
+                .select("wild_battles_since_badge,badges")
+                .eq("discord_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            rows = res.data or []
+            if not rows:
+                # sem player, não deixa batalhar
+                return False, 0
+
+            row = rows[0]
+            current = int(row.get("wild_battles_since_badge") or 0)
+            badges = int(row.get("badges") or 0)
+
+            # se não tem nenhuma insígnia ainda, você pode escolher:
+            # - ou não limitar (return True, current)
+            # - ou já contar desde 0 insígnias
+            # vou considerar que conta desde o início
+            if current >= limit:
+                return False, current
+
+            new_val = current + 1
+            (
+                self.supabase.table("players")
+                .update({"wild_battles_since_badge": new_val})
+                .eq("discord_id", user_id)
+                .execute()
+            )
+            return True, new_val
+        except Exception as e:
+            print(f"[BattleCog:_can_start_wild_battle][ERROR] {e}", flush=True)
+            # Falha em BD não deve travar o jogo → deixa batalhar mesmo assim
+            return True, 0
+    
     async def _load_move_info(self, move_name: str) -> Dict[str, Any]:
         try:
             url = f"https://pokeapi.co/api/v2/move/{str(move_name).lower()}"
@@ -814,6 +858,26 @@ class BattleCog(commands.Cog):
             await ctx.send("Seu Pokémon ativo está desmaiado. Cure-o antes de batalhar.")
             return
 
+        can_battle, count = await self._can_start_wild_battle(ctx.author.id, limit=10)
+        if not can_battle:
+            await ctx.send(
+                "⚠️ Você já realizou as **10 batalhas selvagens** permitidas "
+                "com suas insígnias atuais.\n"
+                "Derrote um líder de ginásio para liberar mais batalhas!"
+            )
+            return
+
+        st = await self._build_state(ctx)
+        if not st:
+            return
+        self.active_battles[ctx.author.id] = st
+
+        await ctx.send(f"Um selvagem **{st.opp_name.capitalize()}** Lv.{st.opp_level} apareceu!")
+        embed = self._build_embed(st)
+        view = BattleCog.BattleView(self, st)
+        msg = await ctx.send(embed=embed, view=view)
+        view.message = msg    
+    
         st = await self._build_state(ctx)
         if not st:
             return
