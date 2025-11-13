@@ -256,7 +256,10 @@ class TravelViewSafe(discord.ui.View):
         try:
             (
                 self.supabase.table("players")
-                .update({"badges": new_val})
+                .update({
+                    "D": new_val,
+                    "wild_battles_since_badge": 0   # 🔽 reset aqui
+                })
                 .eq("discord_id", self.player.user_id)
                 .execute()
             )
