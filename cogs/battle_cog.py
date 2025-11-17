@@ -584,8 +584,16 @@ class BattleCog(commands.Cog):
             self.message = interaction.message
             if not await self._pre_check(interaction):
                 return
+
+            # ✅ Ack da interação (mostra o "pensando..." e permite usar followup)
+            try:
+                await interaction.response.defer()
+            except Exception:
+                pass
+
             # Troca voluntária -> consome turno (oponente ataca depois)
             await self.cog._prompt_switch(interaction, self.st, forced=False)
+
 
         async def _on_run_clicked(self, interaction: discord.Interaction):
             self.message = interaction.message
