@@ -15,6 +15,10 @@ from utils.static_pokemon_utils import (
     get_black_shop_basic_pool,
 )
 
+# função global de criação de Pokémon
+from cogs.player_cog import add_pokemon_to_player
+
+
 # -------------------------------------------------------------------
 # Supabase helper
 # -------------------------------------------------------------------
@@ -34,14 +38,6 @@ BLACK_MARKET_MAX_BET = 100_000
 # Preço por Pokémon aleatório (mercado negro)
 BLACK_MARKET_POKEMON_PRICE = 8_000
 
-# Multiplicadores por raridade no caça-níquel:
-SLOTS_PAYOUT_MULTIPLIERS = {
-    "common": 2,      # 3 comuns  => aposta x2
-    "uncommon": 5,    # 3 incomuns => aposta x5
-    "rare": 10,       # 3 raros   => aposta x10
-    "mythical": 20,   # 3 míticos => aposta x20
-}
-
 # Pesos das raridades no caça-níquel (quanto maior, mais comum)
 SLOTS_RARITY_WEIGHTS = {
     "common": 60,
@@ -52,7 +48,7 @@ SLOTS_RARITY_WEIGHTS = {
 
 # Ícones de “slot machine” por raridade
 RARITY_ICONS = {
-    "common": "🍒",      # equivalente à cereja
+    "common": "🍒",      # cereja
     "uncommon": "🪙",    # moeda
     "rare": "💎",        # diamante
     "mythical": "7️⃣",   # número 7
@@ -124,11 +120,19 @@ class BlackShopCog(commands.Cog):
         """
         Retorna um dict com:
           { 'rarity', 'icon', 'pokemon_id', 'pokemon_name', 'sprite_url' }
+
+        A raridade define o ícone:
+          - common   -> 🍒
+          - uncommon -> 🪙
+          - rare     -> 💎
+          - mythical -> 7️⃣
+
+        MAS a checagem de vitória é por Pokémon (3 do MESMO).
         """
         rarity = self._roll_rarity()
         pool = get_black_slots_pool(rarity)
         if not pool:
-            # fallback de segurança
+            # fallback de segurança: pool básico
             pool = get_black_shop_basic_pool()
 
         pokemon = random.choice(pool)
@@ -139,6 +143,7 @@ class BlackShopCog(commands.Cog):
             "pokemon_id": pokedex_id,
             "pokemon_name": pokemon["name"],
             "sprite_url": get_sprite_url(pokedex_id),
+            "static_def": pokemon,
         }
 
     def _spin_slots(self, reels: int = 3):
@@ -146,71 +151,92 @@ class BlackShopCog(commands.Cog):
 
     # ---------------------- helpers de pokémon -----------------------
 
-    async def _grant_pokemon_to_player(self, player_id: int, pokemon_def: StaticPokemon) -> dict:
+    async def _maybe_boost_shiny(self, pokemon_row: dict, bet_amount: int) -> dict:
         """
-        HOOK para integrar com seu sistema de criação de Pokémon.
+        Aumenta chance de shiny dependendo do valor da aposta.
 
-        Schema real (tabela player_pokemon):
-          - id (uuid, PK)
-          - player_id (bigint -> players.discord_id)
-          - pokemon_api_name (text)
-          - pokemon_pokedex_id (integer)
-          - current_level (integer)
-          - current_hp (integer, NOT NULL)
-          - ... outros stats
+        - A lógica base de shiny (1/4096) já foi aplicada dentro de add_pokemon_to_player.
+        - Aqui damos uma chance EXTRA, apenas se ainda não for shiny.
 
-        pokemon_def vem do BASIC_BLACK_MARKET_POOL:
-            { "id": <pokedex_id>, "name": "Bulbasaur", "region": 1 }
+        Regra simples (ajusta se quiser):
+          - aposta < 10k  -> sem bônus
+          - 10k–50k       -> ~1/1024 extra
+          - >= 50k        -> ~1/512 extra
+        """
+        if pokemon_row.get("is_shiny"):
+            return pokemon_row
 
-        Aqui você deveria chamar o seu service de criação que popula:
-          - current_hp
-          - stats
-          - moves
-          - etc.
+        if bet_amount < 10_000:
+            return pokemon_row
+        elif bet_amount < 50_000:
+            extra_chance = 1 / 1024
+        else:
+            extra_chance = 1 / 512
 
-        Retorne um dict com infos para mostrar no embed, por exemplo:
-            {
-                "species_name": "Bulbasaur",
-                "level": 5,
-                "nickname": "Bulbasaur",
-                "sprite_url": <url>,
-                "pokemon_pokedex_id": 1,
-                "pokemon_api_name": "bulbasaur"
+        if random.random() < extra_chance:
+            try:
+                self.supabase.table("player_pokemon").update(
+                    {"is_shiny": True}
+                ).eq("id", pokemon_row["id"]).execute()
+                pokemon_row["is_shiny"] = True
+            except Exception as e:
+                print(f"[BlackShop][_maybe_boost_shiny] erro ao atualizar shiny: {e}")
+
+        return pokemon_row
+
+    async def _grant_pokemon_to_player(
+        self,
+        player_id: int,
+        pokemon_def: StaticPokemon,
+        bet_amount: int | None = None,
+    ) -> dict:
+        """
+        Usa add_pokemon_to_player para realmente criar o Pokémon no banco.
+
+        pokemon_def vem do STATIC:
+            { "id": <pokedex_id>, "name": "Bulbasaur", "region": 1, "api_name"?: "bulbasaur" }
+
+        - api_name: se existir é usado direto pra PokeAPI
+        - senão: name.lower() (funciona pra maioria dos casos simples)
+        """
+        pokedex_id = pokemon_def["id"]
+        display_name = pokemon_def["name"]
+        api_name = pokemon_def.get("api_name") or display_name.lower()
+
+        # nível base do prêmio do cassino (ajusta à vontade)
+        level = random.randint(5, 15)
+
+        result = await add_pokemon_to_player(
+            player_id=player_id,
+            pokemon_api_name=api_name,
+            level=level,
+            captured_at="Cassino Mercado Negro",
+            assign_to_party_if_space=True,
+        )
+        if not result.get("success"):
+            return {
+                "success": False,
+                "error": result.get("error", "Erro desconhecido ao criar Pokémon."),
             }
 
-        ⚠️ Por padrão, essa implementação **NÃO SALVA NADA** no banco,
-        apenas devolve um dict “fake” para exibir na mensagem.
-        """
+        row = result["data"]
 
-        pokedex_id = pokemon_def["id"]
-        species_name = pokemon_def["name"]
+        # bônus de shiny com base na aposta (se houver)
+        if bet_amount is not None:
+            row = await self._maybe_boost_shiny(row, bet_amount)
 
-        # TODO: Trocar essa parte para o SEU service de criação.
-        # Exemplo:
-        # created = await pokemon_service.create_random_basic(
-        #     player_id=player_id,
-        #     pokemon_pokedex_id=pokedex_id,
-        #     pokemon_api_name=species_name.lower(),
-        # )
-        # return {
-        #     "species_name": created["pokemon_species_name"],
-        #     "level": created["current_level"],
-        #     "nickname": created["nickname"],
-        #     "sprite_url": created["sprite_url"],
-        #     "pokemon_pokedex_id": created["pokemon_pokedex_id"],
-        #     "pokemon_api_name": created["pokemon_api_name"],
-        # }
-
-        # Implementação de placeholder (não persiste):
-        fake_level = random.randint(5, 10)
+        is_shiny = row.get("is_shiny", False)
+        nickname = row.get("nickname") or display_name
+        level_final = row.get("current_level", level)
+        sprite_url = get_sprite_url(row.get("pokemon_pokedex_id", pokedex_id))
 
         return {
-            "species_name": species_name,
-            "level": fake_level,
-            "nickname": species_name,
-            "sprite_url": get_sprite_url(pokedex_id),
-            "pokemon_pokedex_id": pokedex_id,
-            "pokemon_api_name": species_name.lower(),
+            "success": True,
+            "species_name": display_name,
+            "level": level_final,
+            "nickname": nickname,
+            "sprite_url": sprite_url,
+            "is_shiny": is_shiny,
         }
 
     # ----------------------------------------------------------------
@@ -228,8 +254,9 @@ class BlackShopCog(commands.Cog):
                 "Bem-vindo ao lado sombrio do mundo Pokémon...\n\n"
                 "**Cassino**\n"
                 "• `!blackslots <aposta>` – caça-níquel com pokémons como símbolos.\n"
-                "   - 4 raridades (🍒 comum, 🪙 incomum, 💎 raro, 7️⃣ mítico)\n"
-                "   - 3 iguais = prêmio, multiplicador por raridade.\n\n"
+                "   - Cada slot mostra um Pokémon + ícone (🍒, 🪙, 💎, 7️⃣)\n"
+                "   - Se alinhar **3 do MESMO Pokémon**, você recebe o dinheiro de volta e ainda ganha esse Pokémon.\n"
+                "   - Apostas maiores aumentam a chance de vir **shiny**.\n\n"
                 "**Tráfico de Pokémon**\n"
                 "• `!blackbuy [quantidade]` – compra pokémons aleatórios de 1º estágio\n"
                 "   (sem lendários / míticos).\n"
@@ -244,9 +271,20 @@ class BlackShopCog(commands.Cog):
 
     @commands.command(
         name="blackslots",
-        help="Cassino clandestino: caça-níquel com pokémons. Uso: !blackslots <aposta>",
+        help=(
+            "Cassino clandestino: caça-níquel com pokémons. "
+            "Uso: !blackslots <aposta>"
+        ),
     )
     async def blackslots(self, ctx: commands.Context, bet: int):
+        """
+        Nova lógica:
+          - 3 slots, cada um sorteia um Pokémon (com raridades diferentes).
+          - Você perde a aposta normalmente.
+          - SE os 3 forem o MESMO Pokémon:
+              • recebe o dinheiro de volta (sem lucro)
+              • ganha aquele Pokémon (com chance extra de shiny conforme o valor apostado).
+        """
         if bet <= 0:
             await ctx.send("A aposta precisa ser um número positivo.")
             return
@@ -276,23 +314,14 @@ class BlackShopCog(commands.Cog):
 
         # Roda o caça-níquel
         slots = self._spin_slots(3)
-        rarities = [s["rarity"] for s in slots]
+        pokemon_ids = [s["pokemon_id"] for s in slots]
         icons = [s["icon"] for s in slots]
 
-        # Determina se ganhou
-        won = rarities[0] == rarities[1] == rarities[2]
-        payout = 0
-        rarity_label = None
+        three_of_a_kind = (
+            pokemon_ids[0] == pokemon_ids[1] == pokemon_ids[2]
+        )
 
-        if won:
-            rarity = rarities[0]
-            rarity_label = rarity
-            multiplier = SLOTS_PAYOUT_MULTIPLIERS.get(rarity, 0)
-            payout = bet * multiplier
-            new_money = new_money + payout
-            await self.update_player_money(ctx.author.id, new_money)
-
-        # Monta a mensagem visual
+        # Monta a linha visual: ícone + nome do Pokémon
         line_symbols = " | ".join(
             f"{icons[i]} **{slots[i]['pokemon_name']}**"
             for i in range(3)
@@ -313,30 +342,62 @@ class BlackShopCog(commands.Cog):
         center_sprite = slots[1]["sprite_url"]
         embed.set_thumbnail(url=center_sprite)
 
-        if won:
-            label_pt = {
-                "common": "Comum (🍒)",
-                "uncommon": "Incomum (🪙)",
-                "rare": "Raro (💎)",
-                "mythical": "Mítico (7️⃣)",
-            }.get(rarity_label, rarity_label)
-
-            embed.add_field(
-                name="Resultado",
-                value=(
-                    f"🎉 **3 de mesma raridade!**\n"
-                    f"Raridade: **{label_pt}**\n"
-                    f"Multiplicador: **x{SLOTS_PAYOUT_MULTIPLIERS[rarity_label]}**\n"
-                    f"Você ganhou **${payout:,}**!"
-                ),
-                inline=False,
-            )
-        else:
+        if not three_of_a_kind:
+            # perdeu a aposta
             embed.add_field(
                 name="Resultado",
                 value=f"💀 Nada alinhado... você perdeu **${bet:,}**.",
                 inline=False,
             )
+            embed.add_field(
+                name="Seu saldo após a rodada",
+                value=f"**${new_money:,}**",
+                inline=False,
+            )
+            embed.set_footer(text="A casa sempre ganha... eventualmente. 😉")
+            await ctx.send(embed=embed)
+            return
+
+        # VENCEU: 3 do MESMO Pokémon
+        winning_static = slots[0]["static_def"]
+        winning_name = winning_static["name"]
+
+        # Dinheiro de volta (sem lucro)
+        new_money += bet
+        await self.update_player_money(ctx.author.id, new_money)
+
+        # Cria o Pokémon pro jogador
+        reward = await self._grant_pokemon_to_player(
+            player_id=ctx.author.id,
+            pokemon_def=winning_static,
+            bet_amount=bet,
+        )
+
+        if not reward.get("success"):
+            embed.add_field(
+                name="Resultado",
+                value=(
+                    f"⚠️ Você alinhou **3x {winning_name}**, então deveria receber o Pokémon "
+                    f"e o dinheiro de volta, mas ocorreu um erro ao criar o Pokémon:\n"
+                    f"`{reward.get('error', 'erro desconhecido')}`"
+                ),
+                inline=False,
+            )
+        else:
+            shiny_text = " ✨ **SHINY!!!** ✨" if reward.get("is_shiny") else ""
+            embed.add_field(
+                name="Resultado",
+                value=(
+                    f"🎉 **JACKPOT!**\n"
+                    f"Você alinhou **3x {winning_name}**.\n"
+                    f"• Aposta devolvida: **${bet:,}**\n"
+                    f"• Pokémon recebido: Lv.{reward['level']} "
+                    f"**{reward['nickname']}** (*{reward['species_name']}*){shiny_text}"
+                ),
+                inline=False,
+            )
+            if reward.get("sprite_url"):
+                embed.set_thumbnail(url=reward["sprite_url"])
 
         embed.add_field(
             name="Seu saldo após a rodada",
@@ -344,7 +405,7 @@ class BlackShopCog(commands.Cog):
             inline=False,
         )
 
-        embed.set_footer(text="A casa sempre ganha... eventualmente. 😉")
+        embed.set_footer(text="Quanto mais alto o risco, maior a chance de brilhar... literalmente. 😉")
         await ctx.send(embed=embed)
 
     # -------------------- COMPRA CLANDESTINA ------------------------
@@ -384,24 +445,37 @@ class BlackShopCog(commands.Cog):
         bought_pokemon = []
         for _ in range(quantity):
             base_def = random.choice(get_black_shop_basic_pool())
-            granted = await self._grant_pokemon_to_player(ctx.author.id, base_def)
-            bought_pokemon.append(granted)
+            reward = await self._grant_pokemon_to_player(
+                player_id=ctx.author.id,
+                pokemon_def=base_def,
+                bet_amount=None,  # sem bônus extra de shiny aqui (se quiser, coloca um valor)
+            )
+            bought_pokemon.append(reward)
 
         # Monta embed de feedback
         embed = discord.Embed(
             title="🖤 Compra Clandestina Concluída",
             description=(
                 f"Você pagou **${total_price:,}** ao mercado negro.\n"
-                "Pokémons recebidos (teoricamente 😏):"
+                "Pokémons recebidos:"
             ),
             color=discord.Color.dark_purple(),
         )
 
         for idx, pkm in enumerate(bought_pokemon, start=1):
+            if not pkm.get("success"):
+                embed.add_field(
+                    name=f"#{idx}",
+                    value=f"❌ Erro ao criar Pokémon: {pkm.get('error', 'desconhecido')}",
+                    inline=False,
+                )
+                continue
+
             species = pkm.get("species_name", "???")
             level = pkm.get("level", "?")
             nick = pkm.get("nickname", species)
-            line = f"Lv.{level} **{nick}** (*{species}*)"
+            shiny_text = " ✨(shiny)" if pkm.get("is_shiny") else ""
+            line = f"Lv.{level} **{nick}** (*{species}*){shiny_text}"
             embed.add_field(
                 name=f"#{idx}",
                 value=line,
@@ -409,20 +483,14 @@ class BlackShopCog(commands.Cog):
             )
 
         # Usa sprite do primeiro como thumbnail, se tiver
-        if bought_pokemon and bought_pokemon[0].get("sprite_url"):
-            embed.set_thumbnail(url=bought_pokemon[0]["sprite_url"])
+        first_ok = next((p for p in bought_pokemon if p.get("success") and p.get("sprite_url")), None)
+        if first_ok:
+            embed.set_thumbnail(url=first_ok["sprite_url"])
 
         embed.add_field(
             name="Seu novo saldo",
             value=f"**${new_money:,}**",
             inline=False,
-        )
-
-        embed.set_footer(
-            text=(
-                "⚠️ IMPORTANTE: Integre o método _grant_pokemon_to_player "
-                "com seu sistema de criação para realmente salvar esses pokémons no banco."
-            )
         )
 
         await ctx.send(embed=embed)

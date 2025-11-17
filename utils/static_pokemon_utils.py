@@ -23,10 +23,11 @@ class Rarity(str, Enum):
     MYTHICAL = "mythical"
 
 
-class StaticPokemon(TypedDict):
+class StaticPokemon(TypedDict, total=False):
     id: int           # pokedex id oficial
-    name: str         # nome em inglês (ou como você preferir)
+    name: str         # nome para exibir
     region: Optional[int]  # identificador numérico da região (ex: 1 = Kanto)
+    api_name: str     # nome para PokeAPI, se diferente de name.lower()
 
 
 # -------------------------------------------------------------------
@@ -61,9 +62,9 @@ BLACK_SLOTS_POOLS: Dict[Rarity, List[StaticPokemon]] = {
     ],
     Rarity.UNCOMMON: [
         {"id": 25, "name": "Pikachu", "region": 1},
+        {"id": 29, "name": "Nidoran♀", "region": 1, "api_name": "nidoran-f"},
+        {"id": 32, "name": "Nidoran♂", "region": 1, "api_name": "nidoran-m"},
         {"id": 27, "name": "Sandshrew", "region": 1},
-        {"id": 29, "name": "Nidoran♀", "region": 1},
-        {"id": 32, "name": "Nidoran♂", "region": 1},
         {"id": 37, "name": "Vulpix", "region": 1},
         {"id": 41, "name": "Zubat", "region": 1},
     ],
