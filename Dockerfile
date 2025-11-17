@@ -5,11 +5,12 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# Instala dependências do Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copia o código do bot
 COPY . .
 
-EXPOSE 8000
-
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Se seu arquivo principal for "bot.py":
+CMD ["python", "MainBot.py"]
