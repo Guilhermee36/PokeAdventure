@@ -24,10 +24,10 @@ class Rarity(str, Enum):
 
 
 class StaticPokemon(TypedDict, total=False):
-    id: int           # pokedex id oficial
-    name: str         # nome para exibir
+    id: int              # pokedex id oficial
+    name: str            # nome para exibir
     region: Optional[int]  # identificador numérico da região (ex: 1 = Kanto)
-    api_name: str     # nome para PokeAPI, se diferente de name.lower()
+    api_name: str        # nome para PokeAPI, se diferente de name.lower()
 
 
 # -------------------------------------------------------------------
@@ -62,6 +62,7 @@ BLACK_SLOTS_POOLS: Dict[Rarity, List[StaticPokemon]] = {
     ],
     Rarity.UNCOMMON: [
         {"id": 25, "name": "Pikachu", "region": 1},
+        # Nidoran têm api_name diferente da escrita
         {"id": 29, "name": "Nidoran♀", "region": 1, "api_name": "nidoran-f"},
         {"id": 32, "name": "Nidoran♂", "region": 1, "api_name": "nidoran-m"},
         {"id": 27, "name": "Sandshrew", "region": 1},
@@ -131,9 +132,18 @@ BLACK_SHOP_BASIC_POOL: List[StaticPokemon] = [
 ]
 
 
-def get_black_shop_basic_pool() -> List[StaticPokemon]:
-    """Retorna a lista de pokémons básicos usados na compra clandestina."""
-    return BLACK_SHOP_BASIC_POOL
+def get_black_shop_basic_pool(region: Optional[int] = None) -> List[StaticPokemon]:
+    """
+    Retorna a lista de pokémons básicos usados na compra clandestina.
+
+    Se `region` for informado, filtra apenas por aquela região.
+    Se não encontrar nenhum da região, volta o pool completo.
+    """
+    if region is None:
+        return BLACK_SHOP_BASIC_POOL
+
+    filtered = [p for p in BLACK_SHOP_BASIC_POOL if p.get("region") == region]
+    return filtered or BLACK_SHOP_BASIC_POOL
 
 
 # -------------------------------------------------------------------
