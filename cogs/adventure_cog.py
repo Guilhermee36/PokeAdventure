@@ -429,14 +429,36 @@ class TravelViewSafe(discord.ui.View):
 
 
         if can_wild:
-            self._btn_wild = discord.ui.Button(label="\U0001F33F Wild Area", style=discord.ButtonStyle.primary)
+            self._btn_wild = discord.ui.Button(
+                label="\U0001F33F Wild Area",
+                style=discord.ButtonStyle.primary,
+            )
+
             async def wild_cb(inter: discord.Interaction):
                 if inter.user.id != self.player.user_id:
                     return await inter.response.send_message("Ação não é sua.", ephemeral=True)
-                await inter.response.defer()
-                await self.message.channel.send("Você entrou na área selvagem! (placeholder)")
+
+                # Ack da interação (necessário para depois usar followup.send)
+                try:
+                    await inter.response.defer()
+                except Exception:
+                    pass
+
+                # Pega o BattleCog registrado no bot
+                battle_cog = self.bot.get_cog("BattleCog")
+                if not battle_cog:
+                    # Fallback simples caso o cog não esteja carregado
+                    await self.message.channel.send(
+                        "⚠️ O sistema de batalhas não está carregado no bot (BattleCog ausente)."
+                    )
+                    return
+
+                # Inicia a batalha selvagem usando a lógica já existente
+                await battle_cog.start_wild_battle_from_interaction(inter)
+
             self._btn_wild.callback = wild_cb
             self.add_item(self._btn_wild)
+
 
         if can_fish:
             self._btn_fish = discord.ui.Button(label="\U0001F3A3 Pescar", style=discord.ButtonStyle.secondary)

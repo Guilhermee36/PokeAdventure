@@ -242,50 +242,93 @@ class BattleCog(commands.Cog):
             return sprites.get("front_shiny") or art.get("front_shiny")
         return sprites.get("front_default") or art.get("front_default")
 
-    async def _build_state(self, ctx: commands.Context) -> Optional[BattleState]:
-        mon = await self._load_player_active_mon(ctx.author.id)
-        if not mon:
-            await ctx.send("Você não tem Pokémon na party. Use `!addpokemon` para adicionar um.")
+    async def _build_state(self, ctx_or_inter) -> Optional[BattleState]:
+        """
+        Monta o estado inicial da batalha.
+
+        Aceita tanto um commands.Context quanto um discord.Interaction
+        (usado pelo botão Wild no Adventure).
+        """
+        # Descobre o usuário a partir de ctx ou interaction
+        user = getattr(ctx_or_inter, "author", None) or getattr(ctx_or_inter, "user", None)
+        user_id = getattr(user, "id", None)
+        if not user_id:
             return None
 
-        st = BattleState(user_id=ctx.author.id)
+        # Pokémon ativo do jogador
+        mon = await self._load_player_active_mon(user_id)
+        if not mon:
+            # Mensagem de erro simpática, respeitando se é ctx ou interaction
+            try:
+                msg = "Você não tem Pokémon na party. Use `!addpokemon` para adicionar um."
+                if hasattr(ctx_or_inter, "send"):
+                    await ctx_or_inter.send(msg)
+                else:
+                    await ctx_or_inter.followup.send(msg, ephemeral=True)
+            except Exception:
+                pass
+            return None
 
-        # Player snapshot
-        # ---------- Oponente selvagem: delega ao wild_utils ----------
+        st = BattleState(user_id=user_id)
+
+        # ===== Snapshot do jogador =====
+        st.player_mon = dict(mon)
+        mon_name = mon["pokemon_api_name"]
+
+        mon_data = await pokeapi.get_pokemon_data(mon_name)
+        st.player_types = [
+            t["type"]["name"]
+            for t in (mon_data or {}).get("types", [])
+        ]
+
+        st.player_moves = await self._inflate_player_moves(mon)
+        st.player_sprite_url = await self._get_sprite_url(
+            mon_name,
+            shiny=bool(mon.get("is_shiny")),
+        )
+
+        # ===== Oponente selvagem (usa wild_utils) =====
         ref_level = int(mon.get("current_level") or 5)
 
         wild_info = await wild_utils.pick_wild_for_player(
             self.supabase,
-            discord_id=ctx.author.id,
+            discord_id=user_id,
             ref_level=ref_level,
             rng=st.rng,
             default_species=DEFAULT_WILD,
-            version=None,  # se quiser, pode fixar ex: "firered"
+            version=None,  # se quiser, pode fixar algo tipo "firered"
         )
 
         st.opp_name = wild_info["pokemon_api_name"]
         st.opp_level = int(wild_info["level"])
 
-        # A partir daqui, continua igual: monta dados de batalha do oponente
+        # Dados do oponente a partir da PokeAPI
         opp_data = await pokeapi.get_pokemon_data(st.opp_name)
         opp_species = await pokeapi.get_pokemon_species_data(
             (opp_data or {}).get("species", {}).get("name", st.opp_name)
         )
 
-        st.opp_types = [t["type"]["name"] for t in (opp_data or {}).get("types", [])] if opp_data else []
+        st.opp_types = [
+            t["type"]["name"]
+            for t in (opp_data or {}).get("types", [])
+        ] if opp_data else []
+
         st.opp_sprite_url = (
             (opp_data or {}).get("sprites", {}).get("other", {})
             .get("official-artwork", {})
             .get("front_default")
             or (opp_data or {}).get("sprites", {}).get("front_default")
         )
+
         st.opp_base_exp = int((opp_data or {}).get("base_experience") or 50)
         st.opp_capture_rate = int((opp_species or {}).get("capture_rate") or 255)
 
         base_stats = (opp_data or {}).get("stats", [])
         st.opp_stats = pokeapi.calculate_stats_for_level(base_stats, st.opp_level)
         st.opp_hp = int(st.opp_stats.get("max_hp", 10))
+
         return st
+
 
 
     def _hp_texts(self, st: BattleState) -> Tuple[str, str]:
@@ -1216,7 +1259,82 @@ class BattleCog(commands.Cog):
                 )
             except Exception:
                 pass
+            
+    async def start_wild_battle_from_interaction(self, interaction: discord.Interaction):
+        """
+        Inicia uma batalha selvagem a partir de um botão (Interaction),
+        reutilizando toda a estrutura já existente de batalha.
+        """
+        user_id = interaction.user.id
 
+        # Já está em batalha?
+        if user_id in self.active_battles:
+            try:
+                await interaction.followup.send(
+                    "Você já está em uma batalha ativa. Termine-a antes de começar outra.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
+
+        # Verifica se tem Pokémon na party
+        mon = await self._load_player_active_mon(user_id)
+        if not mon:
+            try:
+                await interaction.followup.send(
+                    "Você não tem Pokémon na party. Use `!addpokemon <nome>` para adicionar um.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
+
+        # Pokémon ativo desmaiado?
+        if int(mon.get("current_hp") or 0) <= 0:
+            try:
+                await interaction.followup.send(
+                    "Seu Pokémon ativo está desmaiado. Cure-o antes de batalhar.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
+
+        # Limite de batalhas selvagens (por insígnias)
+        can_battle, _ = await self._can_start_wild_battle(user_id, limit=10)
+        if not can_battle:
+            try:
+                await interaction.followup.send(
+                    "⚠️ Você já realizou as **10 batalhas selvagens** permitidas "
+                    "com suas insígnias atuais.\n"
+                    "Derrote um líder de ginásio para liberar mais batalhas!",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
+
+        # Monta o estado (agora compatível com Interaction)
+        st = await self._build_state(interaction)
+        if not st:
+            return
+
+        self.active_battles[user_id] = st
+
+        # Mensagem de spawn + embed inicial
+        await self._send_log(
+            interaction,
+            f"Um selvagem **{st.opp_name.capitalize()}** Lv.{st.opp_level} apareceu!",
+        )
+
+        embed = self._build_embed(st)
+        view = BattleCog.BattleView(self, st)
+        msg = await interaction.followup.send(embed=embed, view=view)
+        view.message = msg
+ 
+     
+                
     # =========================
     # Comando público
     # =========================
