@@ -224,7 +224,6 @@ def next_gym_info(region: str, current_badges: int) -> Optional[Dict[str, object
 # ==============================================================
 
 def get_adjacent_routes(supabase, region: str, location_from: str, *, mainline_only: bool = False) -> List[Dict]:
-    print(f"[event_utils:get_adjacent_routes] region={region!r} location_from={location_from!r} mainline_only={mainline_only}", flush=True)
     try:
         q = (supabase.table("routes")
              .select("location_from,location_to,step,is_mainline,gate")
@@ -235,14 +234,11 @@ def get_adjacent_routes(supabase, region: str, location_from: str, *, mainline_o
         q = q.order("step").order("location_to")
         res = q.execute()
         data = list(res.data or [])
-        print(f"[event_utils:get_adjacent_routes] rows={len(data)} sample={data[:2]}", flush=True)
         return data
     except Exception as e:
-        print(f"[event_utils:get_adjacent_routes][ERROR] {e}", flush=True)
         return []
 
 def get_next_mainline_edge(supabase, region: str, location_from: str) -> Optional[Dict]:
-    print(f"[event_utils:get_next_mainline_edge] region={region!r} location_from={location_from!r}", flush=True)
     try:
         q = (supabase.table("routes")
              .select("location_from,location_to,step,gate")
@@ -254,16 +250,12 @@ def get_next_mainline_edge(supabase, region: str, location_from: str) -> Optiona
         res = q.execute()
         rows = res.data or []
         edge = dict(rows[0]) if rows else None
-        print(f"[event_utils:get_next_mainline_edge] found={bool(edge)} edge={edge}", flush=True)
         return edge
     except Exception as e:
-        print(f"[event_utils:get_next_mainline_edge][ERROR] {e}", flush=True)
         return None
 
 def get_permitted_destinations(supabase, player: Any, region: str, location_from: str, *, mainline_only: bool = False) -> List[Dict]:
-    print(f"[event_utils:get_permitted_destinations] region={region!r} from={location_from!r} mainline_only={mainline_only}", flush=True)
     edges = get_adjacent_routes(supabase, region, location_from, mainline_only=mainline_only)
-    print(f"[event_utils:get_permitted_destinations] edges={len(edges)}", flush=True)
 
     allowed: List[Dict] = []
     try:
@@ -277,14 +269,10 @@ def get_permitted_destinations(supabase, player: Any, region: str, location_from
                     "gate": gate
                 })
         allowed.sort(key=lambda d: (d["step"] is None, d["step"] or 10**9, d["location_to"]))
-        print(f"[event_utils:get_permitted_destinations] allowed={len(allowed)} sample={allowed[:2]}", flush=True)
-        return allowed
     except Exception as e:
-        print(f"[event_utils:get_permitted_destinations][ERROR] {e}", flush=True)
         return []
 
 def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
-    print(f"[event_utils:get_location_info] location_api_name={location_api_name!r}", flush=True)
     try:
         res = (supabase.table("locations")
                .select("location_api_name,name,type,region,has_gym,has_shop,default_area,metadata")
@@ -293,8 +281,6 @@ def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
                .execute())
         rows = res.data or []
         info = dict(rows[0]) if rows else None
-        print(f"[event_utils:get_location_info] found={bool(info)} info={info}", flush=True)
         return info
     except Exception as e:
-        print(f"[event_utils:get_location_info][ERROR] {e}", flush=True)
         return None
