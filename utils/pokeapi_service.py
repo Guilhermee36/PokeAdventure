@@ -138,6 +138,70 @@ async def get_species_flavor_text_pt(pokemon_name_or_id: str) -> str:
     data = await get_pokemon_species_data(pokemon_name_or_id)
     return get_portuguese_flavor_text(data)
 
+# ---------- encontros por location-area (PokeAPI) ----------
+
+async def get_location_area_encounters(location_area_name: str, version: str | None = None) -> list[dict]:
+    """
+    Retorna uma lista simplificada de encontros de Pokémon para uma location-area da PokeAPI.
+
+    Cada item:
+      {
+        'pokemon_name': str,
+        'chance': int,       # chance máxima encontrada para essa versão
+        'min_level': int,
+        'max_level': int
+      }
+
+    Se `version` for None, considera qualquer versão disponível.
+    """
+    if not location_area_name:
+        return []
+
+    url = f"{BASE_URL}/location-area/{str(location_area_name).lower()}"
+    data = await get_data_from_url(url)
+    if not data:
+        return []
+
+    version = version.lower() if version else None
+    results: list[dict] = []
+
+    for enc in data.get("pokemon_encounters", []):
+        poke = enc.get("pokemon") or {}
+        name = (poke.get("name") or "").lower()
+        if not name:
+            continue
+
+        best_chance = 0
+        min_level = 1
+        max_level = 1
+
+        for vd in enc.get("version_details", []):
+            vname = ((vd.get("version") or {}).get("name") or "").lower()
+            if version and vname != version:
+                continue
+
+            for det in vd.get("encounter_details", []):
+                chance = int(det.get("chance") or 0)
+                if chance > best_chance:
+                    best_chance = chance
+                    min_level = int(det.get("min_level") or 1)
+                    max_level = int(det.get("max_level") or min_level)
+
+        if best_chance <= 0:
+            continue
+
+        results.append(
+            {
+                "pokemon_name": name,
+                "chance": best_chance,
+                "min_level": min_level,
+                "max_level": max_level,
+            }
+        )
+
+    return results
+
+
 async def get_pokemon_sprite_urls(pokemon_name: str) -> dict:
     data = await get_pokemon_data(pokemon_name)
     if not data:

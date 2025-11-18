@@ -10,10 +10,13 @@ import discord
 from discord.ext import commands
 from supabase import create_client, Client
 
+
 # Utils do projeto
-import utils.pokeapi_service as pokeapi  # get_pokemon_data, get_pokemon_species_data, get_total_xp_for_level, calculate_stats_for_level
-from utils import battle_utils  # calc_damage, hp_bar, capture_chance, attempt_capture, describe_effectiveness
+import utils.pokeapi_service as pokeapi  # ...
+from utils import battle_utils  # ...
 from utils.inventory_utils import get_item_qty, consume_item, POKEBALL_NAME
+from utils import wild_utils  # novo: lógica de escolha de Pokémon selvagem
+
 
 # Se tiver helper de captura persistida:
 try:
@@ -248,22 +251,27 @@ class BattleCog(commands.Cog):
         st = BattleState(user_id=ctx.author.id)
 
         # Player snapshot
-        st.player_mon = mon
-        st.player_sprite_url = await self._get_sprite_url(
-            mon.get("pokemon_api_name"),
-            shiny=bool(mon.get("is_shiny")),
-        )
-        pkmn_data = await pokeapi.get_pokemon_data(mon.get("pokemon_api_name"))
-        st.player_types = [t["type"]["name"] for t in (pkmn_data or {}).get("types", [])] if pkmn_data else []
-        st.player_moves = await self._inflate_player_moves(mon)
+        # ---------- Oponente selvagem: delega ao wild_utils ----------
+        ref_level = int(mon.get("current_level") or 5)
 
-        # Oponente simples (mesmo level)
-        st.opp_name = DEFAULT_WILD
-        st.opp_level = int(mon.get("current_level") or 5)
+        wild_info = await wild_utils.pick_wild_for_player(
+            self.supabase,
+            discord_id=ctx.author.id,
+            ref_level=ref_level,
+            rng=st.rng,
+            default_species=DEFAULT_WILD,
+            version=None,  # se quiser, pode fixar ex: "firered"
+        )
+
+        st.opp_name = wild_info["pokemon_api_name"]
+        st.opp_level = int(wild_info["level"])
+
+        # A partir daqui, continua igual: monta dados de batalha do oponente
         opp_data = await pokeapi.get_pokemon_data(st.opp_name)
         opp_species = await pokeapi.get_pokemon_species_data(
             (opp_data or {}).get("species", {}).get("name", st.opp_name)
         )
+
         st.opp_types = [t["type"]["name"] for t in (opp_data or {}).get("types", [])] if opp_data else []
         st.opp_sprite_url = (
             (opp_data or {}).get("sprites", {}).get("other", {})
@@ -278,6 +286,7 @@ class BattleCog(commands.Cog):
         st.opp_stats = pokeapi.calculate_stats_for_level(base_stats, st.opp_level)
         st.opp_hp = int(st.opp_stats.get("max_hp", 10))
         return st
+
 
     def _hp_texts(self, st: BattleState) -> Tuple[str, str]:
         php = int(st.player_mon.get("current_hp") or 1)
