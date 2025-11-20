@@ -188,7 +188,7 @@ class TravelViewSafe(discord.ui.View):
             location_from=self.player.location_api_name,
             player=self.player,
             mainline_only=self.mainline_only,
-        )
+        ) or []
 
     def _query_loc_info_sync(self) -> Optional[dict]:
         return event_utils.get_location_info(self.supabase, self.player.location_api_name)

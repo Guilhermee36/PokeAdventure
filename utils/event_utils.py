@@ -238,6 +238,7 @@ def get_adjacent_routes(supabase, region: str, location_from: str, *, mainline_o
     except Exception as e:
         return []
 
+
 def get_next_mainline_edge(supabase, region: str, location_from: str) -> Optional[Dict]:
     try:
         q = (supabase.table("routes")
@@ -269,8 +270,10 @@ def get_permitted_destinations(supabase, player: Any, region: str, location_from
                     "gate": gate
                 })
         allowed.sort(key=lambda d: (d["step"] is None, d["step"] or 10**9, d["location_to"]))
+        return allowed          # ✅ FALTAVA ISSO
     except Exception as e:
         return []
+
 
 def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
     try:
