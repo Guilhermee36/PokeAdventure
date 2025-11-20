@@ -128,8 +128,15 @@ class TravelViewSafe(discord.ui.View):
             description="Carregando destinos…",
             color=discord.Color.blurple(),
         )
+
         self.message = await ctx.send(embed=embed, file=file) if file else await ctx.send(embed=embed)
-        await self._render()
+
+        # >>> ADICIONAR ESTE TRY/EXCEPT <<<
+        try:
+            await self._render()
+        except Exception as e:
+            print(f"[TravelViewSafe:start:_render][ERROR] {e}", flush=True)
+            await self._show_error(e)
 
     async def _refresh_player_from_db(self, user_id: int):
         try:
