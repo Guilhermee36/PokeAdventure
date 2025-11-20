@@ -105,10 +105,10 @@ class TravelViewSafe(discord.ui.View):
     # ------------ lifecycle ------------
 
     async def start(self, ctx: commands.Context):
-        # Refresca dados do player (região, localização, badges e flags) do BD
+        # 1) Refresca dados do player (região, localização, badges e flags) do BD
         await self._refresh_player_from_db(ctx.author.id)
 
-        # imagem por região no primeiro envio
+        # 2) Tenta carregar imagem da região
         region_name = (self.player.region or "Kanto").strip()
         img_path = os.path.join("assets", "Regions", f"{region_name}.webp")
 
@@ -117,26 +117,34 @@ class TravelViewSafe(discord.ui.View):
             try:
                 self._region_img_filename = f"{region_name}.webp"
                 file = discord.File(img_path, filename=self._region_img_filename)
-            except Exception:
+            except Exception as e:
+                print(f"[TravelViewSafe:start][WARN ao carregar imagem da região] {e}", flush=True)
                 file = None
 
-        # carrega destinos + UI inicial
-        await self._reload_destinations()
-
+        # 3) Manda embed inicial o mais rápido possível
         embed = discord.Embed(
             title=f"\U0001F9ED Viagem — {slug_to_title(self.player.location_api_name)}",
             description="Carregando destinos…",
             color=discord.Color.blurple(),
         )
 
-        self.message = await ctx.send(embed=embed, file=file) if file else await ctx.send(embed=embed)
+        self.message = await (ctx.send(embed=embed, file=file) if file else ctx.send(embed=embed))
 
-        # >>> ADICIONAR ESTE TRY/EXCEPT <<<
+        # 4) Agora sim, carrega destinos + renderiza UI
         try:
+            print(f"[TravelViewSafe:start] carregando destinos para region={self.player.region} "
+                  f"loc={self.player.location_api_name}", flush=True)
+
+            await self._reload_destinations()
+
+            print(f"[TravelViewSafe:start] destinos={len(self._dest_cache)} "
+                  f"loc_info={self._loc_info} next_edge={self._next_edge}", flush=True)
+
             await self._render()
         except Exception as e:
             print(f"[TravelViewSafe:start:_render][ERROR] {e}", flush=True)
             await self._show_error(e)
+
 
     async def _refresh_player_from_db(self, user_id: int):
         try:
@@ -593,7 +601,11 @@ class TravelViewSafe(discord.ui.View):
 
     async def _render(self):
         if not self.message:
+            print("[TravelViewSafe:_render] self.message está None, não há o que editar.", flush=True)
             return
+
+        print(f"[TravelViewSafe:_render] loc={self.player.location_api_name} "
+              f"dests={len(self._dest_cache)}", flush=True)
 
         current_loc_title = slug_to_title(self.player.location_api_name)
 
@@ -635,7 +647,13 @@ class TravelViewSafe(discord.ui.View):
         self._rebuild_select()
         self._rebuild_action_buttons()
 
-        await self.message.edit(embed=embed, view=self)
+        try:
+            await self.message.edit(embed=embed, view=self)
+            print("[TravelViewSafe:_render] message.edit concluído com sucesso.", flush=True)
+        except Exception as e:
+            print(f"[TravelViewSafe:_render][ERROR ao editar mensagem] {e}", flush=True)
+            await self._show_error(e)
+
 
 
 # -----------------------
