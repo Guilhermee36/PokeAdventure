@@ -3,7 +3,7 @@
 from __future__ import annotations
 from typing import Any, Dict, Optional, List
 import random
-
+import traceback
 from supabase import Client
 
 import utils.pokeapi_service as pokeapi
@@ -73,8 +73,10 @@ async def _get_player_location_area(
         return default_area or None
 
     except Exception as e:
-        print(f"[wild_utils:_get_player_location_area][ERROR] {e}", flush=True)
-        return None
+        print(f"[wild_utils:pick_wild_for_player][ERROR] {e}", flush=True)
+        traceback.print_exc()
+        raise  # <--- não volta Pidgey em silêncio, explode com stack trace
+
 
 
 async def pick_wild_for_player(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import json
+import traceback
 
 # ==============================================================
 #  🌍 SPAWNS por região
@@ -277,13 +278,17 @@ def get_permitted_destinations(supabase, player: Any, region: str, location_from
 
 def get_location_info(supabase, location_api_name: str) -> Optional[Dict]:
     try:
-        res = (supabase.table("locations")
-               .select("location_api_name,name,type,region,has_gym,has_shop,default_area,metadata")
-               .eq("location_api_name", location_api_name)
-               .limit(1)
-               .execute())
+        res = (
+            supabase.table("locations")
+            .select("location_api_name,name,type,region,has_gym,has_shop,default_area,metadata")
+            .eq("location_api_name", location_api_name)
+            .limit(1)
+            .execute()
+        )
         rows = res.data or []
         info = dict(rows[0]) if rows else None
         return info
     except Exception as e:
-        return None
+        print(f"[event_utils:get_location_info][ERROR] {e}", flush=True)
+        traceback.print_exc()
+        raise  # <--- deixa a exceção subir pra você ver o erro real
