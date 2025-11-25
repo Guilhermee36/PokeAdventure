@@ -1,0 +1,2452 @@
+[
+  {
+    "location_api_name": "aether-paradise",
+    "default_area": "aether-paradise-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "akala-outskirts",
+    "default_area": "akala-outskirts-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "ancient-poni-path",
+    "default_area": "ancient-poni-path-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "brooklet-hill",
+    "default_area": "brooklet-hill-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "digletts-tunnel",
+    "default_area": "digletts-tunnel-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "hauoli-city",
+    "default_area": "hauoli-city-area",
+    "region": "Alola",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "heahea-city",
+    "default_area": "heahea-city-area",
+    "region": "Alola",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "iki-town",
+    "default_area": "iki-town-area",
+    "region": "Alola",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "konikoni-city",
+    "default_area": "konikoni-city-area",
+    "region": "Alola",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "lush-jungle",
+    "default_area": "lush-jungle-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "malie-city",
+    "default_area": "malie-city-area",
+    "region": "Alola",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "memorial-hill",
+    "default_area": "memorial-hill-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "mount-hokulani",
+    "default_area": "mount-hokulani-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "mount-lanakila",
+    "default_area": "mount-lanakila-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "paniola-town",
+    "default_area": "paniola-town-area",
+    "region": "Alola",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "pokemon-league-alola",
+    "default_area": "pokemon-league-alola-area",
+    "region": "Alola",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "poni-breaker-coast",
+    "default_area": "poni-breaker-coast-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "poni-wilds",
+    "default_area": "poni-wilds-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "route-1-alola",
+    "default_area": "route-1-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-10-alola",
+    "default_area": "route-10-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-11-alola",
+    "default_area": "route-11-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-12-alola",
+    "default_area": "route-12-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-13-alola",
+    "default_area": "route-13-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-15-alola",
+    "default_area": "route-15-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-16-alola",
+    "default_area": "route-16-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-2-alola",
+    "default_area": "route-2-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-3-alola",
+    "default_area": "route-3-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-4-alola",
+    "default_area": "route-4-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-5-alola",
+    "default_area": "route-5-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-7-alola",
+    "default_area": "route-7-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-8-alola",
+    "default_area": "route-8-alola-area",
+    "region": "Alola",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "seafolk-village",
+    "default_area": "seafolk-village-area",
+    "region": "Alola",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "tapu-village",
+    "default_area": "tapu-village-area",
+    "region": "Alola",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "ulaula-meadow",
+    "default_area": "ulaula-meadow-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "vast-poni-canyon",
+    "default_area": "vast-poni-canyon-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "verdant-cavern",
+    "default_area": "verdant-cavern-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "victory-road-alola",
+    "default_area": "victory-road-alola-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "wela-volcano-park",
+    "default_area": "wela-volcano-park-area",
+    "region": "Alola",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "circhester",
+    "default_area": "circhester-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "galar-mine",
+    "default_area": "galar-mine-area",
+    "region": "Galar",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "galar-mine-no-2",
+    "default_area": "galar-mine-no-2-area",
+    "region": "Galar",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "hammerlocke",
+    "default_area": "hammerlocke-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "hulbury",
+    "default_area": "hulbury-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "motostoke",
+    "default_area": "motostoke-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "motostoke-outskirts",
+    "default_area": "motostoke-outskirts-area",
+    "region": "Galar",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "pokemon-league-galar",
+    "default_area": "pokemon-league-galar-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "postwick",
+    "default_area": "postwick-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-1-galar",
+    "default_area": "route-1-galar-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-10-galar",
+    "default_area": "route-10-galar-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-2-galar",
+    "default_area": "route-2-galar-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-3-galar",
+    "default_area": "route-3-galar-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-4-galar",
+    "default_area": "route-4-galar-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-5-galar",
+    "default_area": "route-5-galar-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-6-galar",
+    "default_area": "route-6-galar-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-7-galar",
+    "default_area": "route-7-galar-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-8-galar",
+    "default_area": "route-8-galar-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-9-galar",
+    "default_area": "route-9-galar-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "slumbering-weald",
+    "default_area": "slumbering-weald-area",
+    "region": "Galar",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "spikemuth",
+    "default_area": "spikemuth-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "stow-on-side",
+    "default_area": "stow-on-side-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "turffield",
+    "default_area": "turffield-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "victory-road-galar",
+    "default_area": "victory-road-galar-area",
+    "region": "Galar",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "wedgehurst",
+    "default_area": "wedgehurst-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "wild-area",
+    "default_area": "wild-area-area",
+    "region": "Galar",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "wyndon",
+    "default_area": "wyndon-area",
+    "region": "Galar",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "dewford-town",
+    "default_area": "dewford-town-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "ever-grande-city",
+    "default_area": "ever-grande-city-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "fallarbor-town",
+    "default_area": "fallarbor-town-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "fiery-path",
+    "default_area": "fiery-path-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "fortree-city",
+    "default_area": "fortree-city-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "granite-cave",
+    "default_area": "granite-cave-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "jagged-pass",
+    "default_area": "jagged-pass-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "lavaridge-town",
+    "default_area": "lavaridge-town-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "lilycove-city",
+    "default_area": "lilycove-city-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "littleroot-town",
+    "default_area": "littleroot-town-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "mauville-city",
+    "default_area": "mauville-city-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "meteor-falls",
+    "default_area": "meteor-falls-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "mossdeep-city",
+    "default_area": "mossdeep-city-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "mt-chimney",
+    "default_area": "mt-chimney-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "mt-pyre",
+    "default_area": "mt-pyre-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "new-mauville",
+    "default_area": "new-mauville-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "oldale-town",
+    "default_area": "oldale-town-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "pacifidlog-town",
+    "default_area": "pacifidlog-town-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "petalburg-city",
+    "default_area": "petalburg-city-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "petalburg-woods",
+    "default_area": "petalburg-woods-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "route-101",
+    "default_area": "route-101-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-102",
+    "default_area": "route-102-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-103",
+    "default_area": "route-103-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-104",
+    "default_area": "route-104-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-105",
+    "default_area": "route-105-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-106",
+    "default_area": "route-106-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-107",
+    "default_area": "route-107-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-109",
+    "default_area": "route-109-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-110",
+    "default_area": "route-110-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-111",
+    "default_area": "route-111-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-112",
+    "default_area": "route-112-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-113",
+    "default_area": "route-113-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-114",
+    "default_area": "route-114-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-115",
+    "default_area": "route-115-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-116",
+    "default_area": "route-116-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-117",
+    "default_area": "route-117-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-118",
+    "default_area": "route-118-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-119",
+    "default_area": "route-119-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-120",
+    "default_area": "route-120-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-121",
+    "default_area": "route-121-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-122",
+    "default_area": "route-122-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-123",
+    "default_area": "route-123-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-124",
+    "default_area": "route-124-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-125",
+    "default_area": "route-125-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-126",
+    "default_area": "route-126-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-127",
+    "default_area": "route-127-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-128",
+    "default_area": "route-128-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "rustboro-city",
+    "default_area": "rustboro-city-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "rusturf-tunnel",
+    "default_area": "rusturf-tunnel-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "seafloor-cavern",
+    "default_area": "seafloor-cavern-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "shoal-cave",
+    "default_area": "shoal-cave-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "slateport-city",
+    "default_area": "slateport-city-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sootopolis-city",
+    "default_area": "sootopolis-city-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "verdanturf-town",
+    "default_area": "verdanturf-town-area",
+    "region": "Hoenn",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "victory-road-hoenn",
+    "default_area": "victory-road-hoenn-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "azalea-town",
+    "default_area": "azalea-town-area",
+    "region": "Johto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "blackthorn-city",
+    "default_area": "blackthorn-city-area",
+    "region": "Johto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "burned-tower",
+    "default_area": "burned-tower-area",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "cherrygrove-city",
+    "default_area": "cherrygrove-city-area",
+    "region": "Johto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "cianwood-city",
+    "default_area": "cianwood-city-area",
+    "region": "Johto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "ecruteak-city",
+    "default_area": "ecruteak-city-area",
+    "region": "Johto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "goldenrod-city",
+    "default_area": "goldenrod-city-area",
+    "region": "Johto",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "ice-path",
+    "default_area": "ice-path-area",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "ilex-forest",
+    "default_area": "ilex-forest-area",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "lake-of-rage",
+    "default_area": "lake-of-rage-area",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "mahogany-town",
+    "default_area": "mahogany-town-area",
+    "region": "Johto",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "national-park",
+    "default_area": "national-park-area",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "new-bark-town",
+    "default_area": "new-bark-town-area",
+    "region": "Johto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "olivine-city",
+    "default_area": "olivine-city-area",
+    "region": "Johto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "route-29",
+    "default_area": "route-29-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-30",
+    "default_area": "route-30-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-31",
+    "default_area": "route-31-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-32",
+    "default_area": "route-32-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-33",
+    "default_area": "route-33-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-34",
+    "default_area": "route-34-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-35",
+    "default_area": "route-35-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-36",
+    "default_area": "route-36-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-37",
+    "default_area": "route-37-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-38",
+    "default_area": "route-38-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-39",
+    "default_area": "route-39-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-40",
+    "default_area": "route-40-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-41",
+    "default_area": "route-41-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-42",
+    "default_area": "route-42-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-43",
+    "default_area": "route-43-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-44",
+    "default_area": "route-44-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-45",
+    "default_area": "route-45-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-46",
+    "default_area": "route-46-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "slowpoke-well",
+    "default_area": "slowpoke-well-area",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "sprout-tower",
+    "default_area": "sprout-tower-area",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "tin-tower",
+    "default_area": "tin-tower-area",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "union-cave",
+    "default_area": "union-cave-area",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "violet-city",
+    "default_area": "violet-city-area",
+    "region": "Johto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "whirl-islands",
+    "default_area": "whirl-islands-area",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "ambrette-town",
+    "default_area": "ambrette-town-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "anistar-city",
+    "default_area": "anistar-city-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "aquacorde-town",
+    "default_area": "aquacorde-town-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "camphrier-town",
+    "default_area": "camphrier-town-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "coumarine-city",
+    "default_area": "coumarine-city-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "couriway-town",
+    "default_area": "couriway-town-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "cyllage-city",
+    "default_area": "cyllage-city-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "dendemille-town",
+    "default_area": "dendemille-town-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "frost-cavern",
+    "default_area": "frost-cavern-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "geosenge-town",
+    "default_area": "geosenge-town-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "glittering-cave",
+    "default_area": "glittering-cave-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "laverre-city",
+    "default_area": "laverre-city-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "lumiose-city",
+    "default_area": "lumiose-city-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "pokemon-league-kalos",
+    "default_area": "pokemon-league-kalos-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "reflection-cave",
+    "default_area": "reflection-cave-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-1-kalos",
+    "default_area": "route-1-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-10-kalos",
+    "default_area": "route-10-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-11-kalos",
+    "default_area": "route-11-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-12-kalos",
+    "default_area": "route-12-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-13-kalos",
+    "default_area": "route-13-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-14-kalos",
+    "default_area": "route-14-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-15-kalos",
+    "default_area": "route-15-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-17-kalos",
+    "default_area": "route-17-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-18-kalos",
+    "default_area": "route-18-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-19-kalos",
+    "default_area": "route-19-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-2-kalos",
+    "default_area": "route-2-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-21-kalos",
+    "default_area": "route-21-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-3-kalos",
+    "default_area": "route-3-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-4-kalos",
+    "default_area": "route-4-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-5-kalos",
+    "default_area": "route-5-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-6-kalos",
+    "default_area": "route-6-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-7-kalos",
+    "default_area": "route-7-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-8-kalos",
+    "default_area": "route-8-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-9-kalos",
+    "default_area": "route-9-kalos-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "santalune-city",
+    "default_area": "santalune-city-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "santalune-forest",
+    "default_area": "santalune-forest-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "shalour-city",
+    "default_area": "shalour-city-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "snowbelle-city",
+    "default_area": "snowbelle-city-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "vaniville-town",
+    "default_area": "vaniville-town-area",
+    "region": "Kalos",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "victory-road-kalos",
+    "default_area": "victory-road-kalos-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "celadon-city",
+    "default_area": "celadon-city-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "cerulean-city",
+    "default_area": "cerulean-city-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "cinnabar-island",
+    "default_area": "cinnabar-island-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "digletts-cave",
+    "default_area": "digletts-cave-area",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "fuchsia-city",
+    "default_area": "fuchsia-city-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "indigo-plateau",
+    "default_area": "indigo-plateau-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "lavender-town",
+    "default_area": "lavender-town-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "mt-moon",
+    "default_area": "mt-moon-area",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "pallet-town",
+    "default_area": "pallet-town-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "pewter-city",
+    "default_area": "pewter-city-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "rock-tunnel",
+    "default_area": "rock-tunnel-area",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-1",
+    "default_area": "route-1-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-10",
+    "default_area": "route-10-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-11",
+    "default_area": "route-11-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-12",
+    "default_area": "route-12-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-13",
+    "default_area": "route-13-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-14",
+    "default_area": "route-14-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-15",
+    "default_area": "route-15-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-16",
+    "default_area": "route-16-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-17",
+    "default_area": "route-17-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-18",
+    "default_area": "route-18-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-19",
+    "default_area": "route-19-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-2",
+    "default_area": "route-2-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-21",
+    "default_area": "route-21-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-22",
+    "default_area": "route-22-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-24",
+    "default_area": "route-24-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-25",
+    "default_area": "route-25-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-3",
+    "default_area": "route-3-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-4",
+    "default_area": "route-4-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-5",
+    "default_area": "route-5-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-6",
+    "default_area": "route-6-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-7",
+    "default_area": "route-7-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-8",
+    "default_area": "route-8-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-9",
+    "default_area": "route-9-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "saffron-city",
+    "default_area": "saffron-city-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "seafoam-islands",
+    "default_area": "seafoam-islands-area",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "underground-5-6",
+    "default_area": "underground-5-6-area",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "underground-7-8",
+    "default_area": "underground-7-8-area",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "vermilion-city",
+    "default_area": "vermilion-city-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "victory-road",
+    "default_area": "victory-road-area",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "viridian-city",
+    "default_area": "viridian-city-area",
+    "region": "Kanto",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "viridian-forest",
+    "default_area": "viridian-forest-area",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "alfornada",
+    "default_area": "alfornada-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "artazon",
+    "default_area": "artazon-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "asado-desert",
+    "default_area": "asado-desert-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "cabo-poco",
+    "default_area": "cabo-poco-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "cascarrafa",
+    "default_area": "cascarrafa-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "cortondo",
+    "default_area": "cortondo-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "dalizapa-passage",
+    "default_area": "dalizapa-passage-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "east-province-area-1",
+    "default_area": "east-province-area-1-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "east-province-area-2",
+    "default_area": "east-province-area-2-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "east-province-area-3",
+    "default_area": "east-province-area-3-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "glaseado-gym",
+    "default_area": "glaseado-gym-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "levincia",
+    "default_area": "levincia-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "los-platos",
+    "default_area": "los-platos-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "medali",
+    "default_area": "medali-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "mesagoza",
+    "default_area": "mesagoza-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "montenevera",
+    "default_area": "montenevera-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "north-province-area-1",
+    "default_area": "north-province-area-1-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "north-province-area-2",
+    "default_area": "north-province-area-2-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "north-province-area-3",
+    "default_area": "north-province-area-3-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "pokemon-league-paldea",
+    "default_area": "pokemon-league-paldea-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "porto-marinada",
+    "default_area": "porto-marinada-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "south-province-area-1",
+    "default_area": "south-province-area-1-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "south-province-area-2",
+    "default_area": "south-province-area-2-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "south-province-area-3",
+    "default_area": "south-province-area-3-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "south-province-area-4",
+    "default_area": "south-province-area-4-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "south-province-area-5",
+    "default_area": "south-province-area-5-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "south-province-area-6",
+    "default_area": "south-province-area-6-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "tagtree-thicket",
+    "default_area": "tagtree-thicket-area",
+    "region": "Paldea",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "victory-road-paldea",
+    "default_area": "victory-road-paldea-area",
+    "region": "Paldea",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "west-province-area-1",
+    "default_area": "west-province-area-1-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "west-province-area-2",
+    "default_area": "west-province-area-2-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "west-province-area-3",
+    "default_area": "west-province-area-3-area",
+    "region": "Paldea",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "zapapico",
+    "default_area": "zapapico-area",
+    "region": "Paldea",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "acuity-lakefront",
+    "default_area": "acuity-lakefront-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "canalave-city",
+    "default_area": "canalave-city-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "celestic-town",
+    "default_area": "celestic-town-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "eterna-city",
+    "default_area": "eterna-city-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "eterna-forest",
+    "default_area": "eterna-forest-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "floaroma-town",
+    "default_area": "floaroma-town-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "hearthome-city",
+    "default_area": "hearthome-city-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "iron-island",
+    "default_area": "iron-island-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "jubilife-city",
+    "default_area": "jubilife-city-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "mt-coronet",
+    "default_area": "mt-coronet-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "oreburgh-city",
+    "default_area": "oreburgh-city-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "oreburgh-gate",
+    "default_area": "oreburgh-gate-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "pastoria-city",
+    "default_area": "pastoria-city-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "pokemon-league-sinnoh",
+    "default_area": "pokemon-league-sinnoh-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "ravaged-path",
+    "default_area": "ravaged-path-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "route-201",
+    "default_area": "route-201-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-202",
+    "default_area": "route-202-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-203",
+    "default_area": "route-203-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-204",
+    "default_area": "route-204-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-205",
+    "default_area": "route-205-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-206",
+    "default_area": "route-206-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-207",
+    "default_area": "route-207-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-208",
+    "default_area": "route-208-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-209",
+    "default_area": "route-209-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-210",
+    "default_area": "route-210-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-211",
+    "default_area": "route-211-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-212",
+    "default_area": "route-212-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-213",
+    "default_area": "route-213-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-214",
+    "default_area": "route-214-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-215",
+    "default_area": "route-215-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-216",
+    "default_area": "route-216-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-217",
+    "default_area": "route-217-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-218",
+    "default_area": "route-218-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-222",
+    "default_area": "route-222-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-223",
+    "default_area": "route-223-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "sandgem-town",
+    "default_area": "sandgem-town-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "snowpoint-city",
+    "default_area": "snowpoint-city-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "solaceon-town",
+    "default_area": "solaceon-town-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "sunyshore-city",
+    "default_area": "sunyshore-city-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "twinleaf-town",
+    "default_area": "twinleaf-town-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "veilstone-city",
+    "default_area": "veilstone-city-area",
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "victory-road-sinnoh",
+    "default_area": "victory-road-sinnoh-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "accumula-town",
+    "default_area": "accumula-town-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "castelia-city",
+    "default_area": "castelia-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "chargestone-cave",
+    "default_area": "chargestone-cave-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "cold-storage",
+    "default_area": "cold-storage-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "desert-resort",
+    "default_area": "desert-resort-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "dragonspiral-tower",
+    "default_area": "dragonspiral-tower-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "dreamyard",
+    "default_area": "dreamyard-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "driftveil-city",
+    "default_area": "driftveil-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "driftveil-drawbridge",
+    "default_area": "driftveil-drawbridge-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "icirrus-city",
+    "default_area": "icirrus-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "lacunosa-town",
+    "default_area": "lacunosa-town-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "mistralton-city",
+    "default_area": "mistralton-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "nacrene-city",
+    "default_area": "nacrene-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "nimbasa-city",
+    "default_area": "nimbasa-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "nuvema-town",
+    "default_area": "nuvema-town-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "opelucid-city",
+    "default_area": "opelucid-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "pinwheel-forest",
+    "default_area": "pinwheel-forest-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "pokemon-league-unova",
+    "default_area": "pokemon-league-unova-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "relic-castle",
+    "default_area": "relic-castle-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-1-unova",
+    "default_area": "route-1-unova-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-10-unova",
+    "default_area": "route-10-unova-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-2-unova",
+    "default_area": "route-2-unova-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-3-unova",
+    "default_area": "route-3-unova-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-4-unova",
+    "default_area": "route-4-unova-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-5-unova",
+    "default_area": "route-5-unova-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-6-unova",
+    "default_area": "route-6-unova-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-7-unova",
+    "default_area": "route-7-unova-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-8-unova",
+    "default_area": "route-8-unova-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "route-9-unova",
+    "default_area": "route-9-unova-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "skyarrow-bridge",
+    "default_area": "skyarrow-bridge-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "striaton-city",
+    "default_area": "striaton-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "tubeline-bridge",
+    "default_area": "tubeline-bridge-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "twist-mountain",
+    "default_area": "twist-mountain-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "undella-town",
+    "default_area": "undella-town-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "victory-road-unova",
+    "default_area": "victory-road-unova-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "empty"
+  }
+]
