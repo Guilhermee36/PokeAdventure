@@ -57,6 +57,7 @@ def choose_candidate(row):
 sql_lines = []
 
 # 2) LOCATION_INVALID: corrigir location_api_name e default_area
+#    Evitando violar a unique constraint locations_location_api_name_key
 for _, row in df_loc_invalid.iterrows():
     old_loc = row["bd_location_api_name"]
     best_name, best_area, has_wilds = choose_candidate(row)
@@ -66,7 +67,6 @@ for _, row in df_loc_invalid.iterrows():
 
     # fallback pra default_area se não tiver área conhecida
     if not best_area or best_area == "nan":
-        # você pode trocar essa linha pra outra lógica se quiser
         best_area = row["bd_default_area"] or f"{best_name}-area"
 
     sql_lines.append(
@@ -74,7 +74,11 @@ for _, row in df_loc_invalid.iterrows():
         f"UPDATE public.locations\n"
         f"SET location_api_name = '{best_name}',\n"
         f"    default_area      = '{best_area}'\n"
-        f"WHERE location_api_name = '{old_loc}';\n"
+        f"WHERE location_api_name = '{old_loc}'\n"
+        f"  AND NOT EXISTS (\n"
+        f"      SELECT 1 FROM public.locations\n"
+        f"      WHERE location_api_name = '{best_name}'\n"
+        f"  );\n"
     )
 
 # 3) AREA_INVALID + WILD_SUSPECT: só corrigir default_area usando poke_areas
