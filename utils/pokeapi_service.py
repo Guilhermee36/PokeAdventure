@@ -10,9 +10,13 @@ BASE_URL = "https://pokeapi.co/api/v2"
 
 # Headers atualizados: 
 # Removemos o "identity" para permitir compressão automática
+# utils/pokeapi_service.py
+
 API_HEADERS = {
     "Accept": "application/json",
-    "User-Agent": "PokeAdventure/1.0 (DiscordBot)",
+    "User-Agent": "PokeAdventure/1.0",
+    # Isso força a API a NÃO usar zstd, usando o clássico gzip que o aiohttp entende
+    "Accept-Encoding": "gzip, deflate" 
 }
 
 # Variável global para a sessão
