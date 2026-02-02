@@ -1,6 +1,6 @@
 # utils/pokeapi_service.py
-
 import aiohttp
+import asyncio
 import math
 import re
 
@@ -8,30 +8,43 @@ import re
 api_cache = {}
 BASE_URL = "https://pokeapi.co/api/v2"
 
-# Headers para PokeAPI:
-# - Accept-Encoding: identity → pede resposta SEM compressão (sem gzip/br/zstd)
+# Headers atualizados: 
+# Removemos o "identity" para permitir compressão automática
 API_HEADERS = {
     "Accept": "application/json",
-    "Accept-Encoding": "identity",
-    "User-Agent": "PokeAdventure/1.0",
+    "User-Agent": "PokeAdventure/1.0 (DiscordBot)",
 }
 
+# Variável global para a sessão
+_session = None
+
+async def get_session():
+    """Retorna uma sessão única para o bot inteiro (Singleton)."""
+    global _session
+    if _session is None or _session.closed:
+        # Definimos um timeout global para não travar o bot
+        timeout = aiohttp.ClientTimeout(total=15)
+        _session = aiohttp.ClientSession(headers=API_HEADERS, timeout=timeout)
+    return _session
 
 async def get_data_from_url(url: str):
     if url in api_cache:
         return api_cache[url]
+    
     try:
-        # Session com headers fixos (sem zstd)
-        async with aiohttp.ClientSession(headers=API_HEADERS) as session:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    api_cache[url] = data
-                    return data
-                else:
-                    print(f"Erro ao buscar dados da API: {resp.status}, url={url}")
+        session = await get_session()
+        async with session.get(url) as resp:
+            # Log de debug para você ver o que está acontecendo no console
+            if resp.status != 200:
+                print(f"[PokeAPI] Erro {resp.status} ao acessar: {url}")
+                return None
+            
+            data = await resp.json()
+            api_cache[url] = data
+            return data
+            
     except Exception as e:
-        print(f"Erro ao buscar dados da API: {e}")
+        print(f"[PokeAPI] Erro de conexão: {e}")
     return None
 
 

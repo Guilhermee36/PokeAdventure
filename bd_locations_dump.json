@@ -15,94 +15,94 @@
   },
   {
     "location_api_name": "alola-route-1",
-    "default_area": "route-1-alola-area",
+    "default_area": "alola-route-1-east",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-10",
-    "default_area": "route-10-alola-area",
+    "default_area": "alola-route-10-area",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-11",
-    "default_area": "route-11-alola-area",
+    "default_area": "alola-route-11-area",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-12",
-    "default_area": "route-12-alola-area",
+    "default_area": "alola-route-12-area",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-13",
-    "default_area": "route-13-alola-area",
+    "default_area": "alola-route-13-area",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-15",
-    "default_area": "route-15-alola-area",
+    "default_area": "alola-route-15-main",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-16",
-    "default_area": "route-16-alola-area",
+    "default_area": "alola-route-16-main",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-2",
-    "default_area": "route-2-alola-area",
+    "default_area": "alola-route-2-main",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-3",
-    "default_area": "route-3-alola-area",
+    "default_area": "alola-route-3-main",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-4",
-    "default_area": "route-4-alola-area",
+    "default_area": "alola-route-4-area",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-5",
-    "default_area": "route-5-alola-area",
+    "default_area": "alola-route-5-area",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-7",
-    "default_area": "route-7-alola-area",
+    "default_area": "alola-route-7-area",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "alola-route-8",
-    "default_area": "route-8-alola-area",
+    "default_area": "alola-route-8-main",
     "region": "Alola",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "ancient-poni-path",
@@ -145,13 +145,6 @@
     "region": "Alola",
     "type": "city",
     "wild_status": "non_empty"
-  },
-  {
-    "location_api_name": "kanto-victory-road-1",
-    "default_area": "victory-road-alola-area",
-    "region": "Alola",
-    "type": "dungeon",
-    "wild_status": "empty"
   },
   {
     "location_api_name": "konikoni-city",
@@ -455,6 +448,20 @@
     "wild_status": "empty"
   },
   {
+    "location_api_name": "abandoned-ship",
+    "default_area": "abandoned-ship-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "cave-of-origin",
+    "default_area": "cave-of-origin-entrance",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "dewford-town",
     "default_area": "dewford-town-area",
     "region": "Hoenn",
@@ -498,192 +505,255 @@
   },
   {
     "location_api_name": "hoenn-route-101",
-    "default_area": "route-101-area",
+    "default_area": "hoenn-route-101-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-102",
-    "default_area": "route-102-area",
+    "default_area": "hoenn-route-102-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-103",
-    "default_area": "route-103-area",
+    "default_area": "hoenn-route-103-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-104",
-    "default_area": "route-104-area",
+    "default_area": "hoenn-route-104-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-105",
-    "default_area": "route-105-area",
+    "default_area": "hoenn-route-105-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-106",
-    "default_area": "route-106-area",
+    "default_area": "hoenn-route-106-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-107",
-    "default_area": "route-107-area",
+    "default_area": "hoenn-route-107-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "hoenn-route-108",
+    "default_area": "hoenn-route-108-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-109",
-    "default_area": "route-109-area",
+    "default_area": "hoenn-route-109-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-110",
-    "default_area": "route-110-area",
+    "default_area": "hoenn-route-110-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-111",
-    "default_area": "route-111-area",
+    "default_area": "hoenn-route-111-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-112",
-    "default_area": "route-112-area",
+    "default_area": "hoenn-route-112-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-113",
-    "default_area": "route-113-area",
+    "default_area": "hoenn-route-113-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-114",
-    "default_area": "route-114-area",
+    "default_area": "hoenn-route-114-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-115",
-    "default_area": "route-115-area",
+    "default_area": "hoenn-route-115-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-116",
-    "default_area": "route-116-area",
+    "default_area": "hoenn-route-116-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-117",
-    "default_area": "route-117-area",
+    "default_area": "hoenn-route-117-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-118",
-    "default_area": "route-118-area",
+    "default_area": "hoenn-route-118-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-119",
-    "default_area": "route-119-area",
+    "default_area": "hoenn-route-119-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-120",
-    "default_area": "route-120-area",
+    "default_area": "hoenn-route-120-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-121",
-    "default_area": "route-121-area",
+    "default_area": "hoenn-route-121-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-122",
-    "default_area": "route-122-area",
+    "default_area": "hoenn-route-122-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-123",
-    "default_area": "route-123-area",
+    "default_area": "hoenn-route-123-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-124",
-    "default_area": "route-124-area",
+    "default_area": "hoenn-route-124-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-125",
-    "default_area": "route-125-area",
+    "default_area": "hoenn-route-125-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-126",
-    "default_area": "route-126-area",
+    "default_area": "hoenn-route-126-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-127",
-    "default_area": "route-127-area",
+    "default_area": "hoenn-route-127-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hoenn-route-128",
-    "default_area": "route-128-area",
+    "default_area": "hoenn-route-128-area",
     "region": "Hoenn",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "hoenn-route-129",
+    "default_area": "hoenn-route-129-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "hoenn-route-130",
+    "default_area": "hoenn-route-130-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "hoenn-route-131",
+    "default_area": "hoenn-route-131-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "hoenn-route-132",
+    "default_area": "hoenn-route-132-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "hoenn-route-133",
+    "default_area": "hoenn-route-133-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "hoenn-route-134",
+    "default_area": "hoenn-route-134-area",
+    "region": "Hoenn",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "hoenn-safari-zone",
+    "default_area": "hoenn-safari-zone-nwmach-bike-area",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "hoenn-victory-road",
+    "default_area": "hoenn-victory-road-1f",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "jagged-pass",
@@ -812,6 +882,13 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "sky-pillar",
+    "default_area": "sky-pillar-1f",
+    "region": "Hoenn",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "slateport-city",
     "default_area": "slateport-city-area",
     "region": "Hoenn",
@@ -833,17 +910,17 @@
     "wild_status": "non_empty"
   },
   {
-    "location_api_name": "victory-road-hoenn",
-    "default_area": "victory-road-hoenn-area",
-    "region": "Hoenn",
-    "type": "dungeon",
-    "wild_status": "empty"
-  },
-  {
     "location_api_name": "azalea-town",
     "default_area": "azalea-town-area",
     "region": "Johto",
     "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "bell-tower",
+    "default_area": "bell-tower-1f",
+    "region": "Johto",
+    "type": "dungeon",
     "wild_status": "non_empty"
   },
   {
@@ -872,6 +949,20 @@
     "default_area": "cianwood-city-area",
     "region": "Johto",
     "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "dark-cave",
+    "default_area": "dark-cave-violet-city-entrance",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "dragons-den",
+    "default_area": "dragons-den-area",
+    "region": "Johto",
+    "type": "dungeon",
     "wild_status": "non_empty"
   },
   {
@@ -904,115 +995,143 @@
   },
   {
     "location_api_name": "johto-route-29",
-    "default_area": "route-29-area",
+    "default_area": "johto-route-29-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-30",
-    "default_area": "route-30-area",
+    "default_area": "johto-route-30-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-31",
-    "default_area": "route-31-area",
+    "default_area": "johto-route-31-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-32",
-    "default_area": "route-32-area",
+    "default_area": "johto-route-32-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-33",
-    "default_area": "route-33-area",
+    "default_area": "johto-route-33-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-34",
-    "default_area": "route-34-area",
+    "default_area": "johto-route-34-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-35",
-    "default_area": "route-35-area",
+    "default_area": "johto-route-35-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-36",
-    "default_area": "route-36-area",
+    "default_area": "johto-route-36-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-37",
-    "default_area": "route-37-area",
+    "default_area": "johto-route-37-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-38",
-    "default_area": "route-38-area",
+    "default_area": "johto-route-38-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-39",
-    "default_area": "route-39-area",
+    "default_area": "johto-route-39-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-42",
-    "default_area": "route-42-area",
+    "default_area": "johto-route-42-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-43",
-    "default_area": "route-43-area",
+    "default_area": "johto-route-43-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-44",
-    "default_area": "route-44-area",
+    "default_area": "johto-route-44-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-45",
-    "default_area": "route-45-area",
+    "default_area": "johto-route-45-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "johto-route-46",
-    "default_area": "route-46-area",
+    "default_area": "johto-route-46-area",
     "region": "Johto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "johto-route-47",
+    "default_area": "johto-route-47-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "johto-route-48",
+    "default_area": "johto-route-48-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "johto-sea-route-40",
+    "default_area": "johto-sea-route-40-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "johto-sea-route-41",
+    "default_area": "johto-sea-route-41-area",
+    "region": "Johto",
+    "type": "route",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "lake-of-rage",
@@ -1027,6 +1146,20 @@
     "region": "Johto",
     "type": "city",
     "wild_status": "empty"
+  },
+  {
+    "location_api_name": "mt-mortar",
+    "default_area": "mt-mortar-1f",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "mt-silver",
+    "default_area": "mt-silver-1f",
+    "region": "Johto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "national-park",
@@ -1050,18 +1183,11 @@
     "wild_status": "non_empty"
   },
   {
-    "location_api_name": "route-40",
-    "default_area": "route-40-area",
+    "location_api_name": "ruins-of-alph",
+    "default_area": "ruins-of-alph-outside",
     "region": "Johto",
-    "type": "route",
-    "wild_status": "empty"
-  },
-  {
-    "location_api_name": "route-41",
-    "default_area": "route-41-area",
-    "region": "Johto",
-    "type": "route",
-    "wild_status": "empty"
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "slowpoke-well",
@@ -1078,11 +1204,11 @@
     "wild_status": "non_empty"
   },
   {
-    "location_api_name": "tin-tower",
-    "default_area": "tin-tower-area",
+    "location_api_name": "tohjo-falls",
+    "default_area": "tohjo-falls-area",
     "region": "Johto",
     "type": "dungeon",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "union-cave",
@@ -1127,11 +1253,25 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "azure-bay",
+    "default_area": "azure-bay-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "camphrier-town",
     "default_area": "camphrier-town-area",
     "region": "Kalos",
     "type": "city",
     "wild_status": "empty"
+  },
+  {
+    "location_api_name": "connecting-cave",
+    "default_area": "connecting-cave-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "coumarine-city",
@@ -1198,135 +1338,170 @@
   },
   {
     "location_api_name": "kalos-route-10",
-    "default_area": "route-10-kalos-area",
+    "default_area": "kalos-route-10-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-11",
-    "default_area": "route-11-kalos-area",
+    "default_area": "kalos-route-11-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-12",
-    "default_area": "route-12-kalos-area",
+    "default_area": "kalos-route-12-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-13",
-    "default_area": "route-13-kalos-area",
+    "default_area": "kalos-route-13-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-14",
-    "default_area": "route-14-kalos-area",
+    "default_area": "kalos-route-14-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-15",
-    "default_area": "route-15-kalos-area",
+    "default_area": "kalos-route-15-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kalos-route-16",
+    "default_area": "kalos-route-16-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-17",
-    "default_area": "route-17-kalos-area",
+    "default_area": "kalos-route-17-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-18",
-    "default_area": "route-18-kalos-area",
+    "default_area": "kalos-route-18-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-19",
-    "default_area": "route-19-kalos-area",
+    "default_area": "kalos-route-19-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-2",
-    "default_area": "route-2-kalos-area",
+    "default_area": "kalos-route-2-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kalos-route-20",
+    "default_area": "kalos-route-20-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-21",
-    "default_area": "route-21-kalos-area",
+    "default_area": "kalos-route-21-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kalos-route-22",
+    "default_area": "kalos-route-22-area",
+    "region": "Kalos",
+    "type": "route",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-3",
-    "default_area": "route-3-kalos-area",
+    "default_area": "kalos-route-3-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-4",
-    "default_area": "route-4-kalos-area",
+    "default_area": "kalos-route-4-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-5",
-    "default_area": "route-5-kalos-area",
+    "default_area": "kalos-route-5-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-6",
-    "default_area": "route-6-kalos-area",
+    "default_area": "kalos-route-6-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-7",
-    "default_area": "route-7-kalos-area",
+    "default_area": "kalos-route-7-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-8",
-    "default_area": "route-8-kalos-area",
+    "default_area": "kalos-route-8-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kalos-route-9",
-    "default_area": "route-9-kalos-area",
+    "default_area": "kalos-route-9-area",
     "region": "Kalos",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kalos-victory-road",
+    "default_area": "kalos-victory-road-unknown-area-322",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "laverre-city",
     "default_area": "laverre-city-area",
     "region": "Kalos",
     "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "lost-hotel",
+    "default_area": "lost-hotel-area",
+    "region": "Kalos",
+    "type": "dungeon",
     "wild_status": "non_empty"
   },
   {
@@ -1337,8 +1512,29 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "parfum-palace",
+    "default_area": "parfum-palace-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "pokemon-village",
+    "default_area": "pokemon-village-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "reflection-cave",
     "default_area": "reflection-cave-unknown-area-305",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "roaming-kalos",
+    "default_area": "roaming-kalos-area",
     "region": "Kalos",
     "type": "dungeon",
     "wild_status": "non_empty"
@@ -1358,6 +1554,13 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "sea-spirits-den",
+    "default_area": "sea-spirits-den-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "shalour-city",
     "default_area": "shalour-city-area",
     "region": "Kalos",
@@ -1370,6 +1573,34 @@
     "region": "Kalos",
     "type": "city",
     "wild_status": "empty"
+  },
+  {
+    "location_api_name": "team-flare-secret-hq",
+    "default_area": "team-flare-secret-hq-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "terminus-cave",
+    "default_area": "terminus-cave-1f",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "tower-of-mastery",
+    "default_area": "tower-of-mastery-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unknown-dungeon",
+    "default_area": "unknown-dungeon-area",
+    "region": "Kalos",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "vaniville-town",
@@ -1429,87 +1660,94 @@
   },
   {
     "location_api_name": "kanto-route-1",
-    "default_area": "route-1-area",
+    "default_area": "kanto-route-1-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-10",
-    "default_area": "route-10-area",
+    "default_area": "kanto-route-10-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-11",
-    "default_area": "route-11-area",
+    "default_area": "kanto-route-11-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-12",
-    "default_area": "route-12-area",
+    "default_area": "kanto-route-12-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-13",
-    "default_area": "route-13-area",
+    "default_area": "kanto-route-13-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-14",
-    "default_area": "route-14-area",
+    "default_area": "kanto-route-14-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-15",
-    "default_area": "route-15-area",
+    "default_area": "kanto-route-15-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-16",
-    "default_area": "route-16-area",
+    "default_area": "kanto-route-16-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-17",
-    "default_area": "route-17-area",
+    "default_area": "kanto-route-17-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-18",
-    "default_area": "route-18-area",
+    "default_area": "kanto-route-18-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-2",
-    "default_area": "route-2-area",
+    "default_area": "kanto-route-2-south-towards-viridian-city",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-22",
-    "default_area": "route-22-area",
+    "default_area": "kanto-route-22-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kanto-route-23",
+    "default_area": "kanto-route-23-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-24",
@@ -1527,52 +1765,94 @@
   },
   {
     "location_api_name": "kanto-route-3",
-    "default_area": "route-3-area",
+    "default_area": "kanto-route-3-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-4",
-    "default_area": "route-4-area",
+    "default_area": "kanto-route-4-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-5",
-    "default_area": "route-5-area",
+    "default_area": "kanto-route-5-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-6",
-    "default_area": "route-6-area",
+    "default_area": "kanto-route-6-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-7",
-    "default_area": "route-7-area",
+    "default_area": "kanto-route-7-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-8",
-    "default_area": "route-8-area",
+    "default_area": "kanto-route-8-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "kanto-route-9",
-    "default_area": "route-9-area",
+    "default_area": "kanto-route-9-area",
     "region": "Kanto",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kanto-safari-zone",
+    "default_area": "kanto-safari-zone-middle",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kanto-sea-route-19",
+    "default_area": "kanto-sea-route-19-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kanto-sea-route-20",
+    "default_area": "kanto-sea-route-20-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kanto-sea-route-21",
+    "default_area": "kanto-sea-route-21-area",
+    "region": "Kanto",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kanto-victory-road-1",
+    "default_area": "kanto-victory-road-1-1f",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "kanto-victory-road-2",
+    "default_area": "kanto-victory-road-2-1f",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "lavender-town",
@@ -1603,25 +1883,25 @@
     "wild_status": "empty"
   },
   {
-    "location_api_name": "rock-tunnel",
-    "default_area": "rock-tunnel-1f",
+    "location_api_name": "pokemon-mansion",
+    "default_area": "pokemon-mansion-1f",
     "region": "Kanto",
     "type": "dungeon",
     "wild_status": "non_empty"
   },
   {
-    "location_api_name": "route-19",
-    "default_area": "route-19-area",
+    "location_api_name": "pokemon-tower",
+    "default_area": "pokemon-tower-1f",
     "region": "Kanto",
-    "type": "route",
+    "type": "dungeon",
     "wild_status": "empty"
   },
   {
-    "location_api_name": "route-21",
-    "default_area": "route-21-area",
+    "location_api_name": "rock-tunnel",
+    "default_area": "rock-tunnel-1f",
     "region": "Kanto",
-    "type": "route",
-    "wild_status": "empty"
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "saffron-city",
@@ -1633,6 +1913,13 @@
   {
     "location_api_name": "seafoam-islands",
     "default_area": "seafoam-islands-1f",
+    "region": "Kanto",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "ss-anne",
+    "default_area": "ss-anne-area",
     "region": "Kanto",
     "type": "dungeon",
     "wild_status": "non_empty"
@@ -1911,6 +2198,13 @@
     "wild_status": "empty"
   },
   {
+    "location_api_name": "acuity-cavern",
+    "default_area": null,
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
     "location_api_name": "acuity-lakefront",
     "default_area": "acuity-lakefront-area",
     "region": "Sinnoh",
@@ -1932,6 +2226,13 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "distortion-world",
+    "default_area": "distortion-world-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
     "location_api_name": "eterna-city",
     "default_area": "eterna-city-area",
     "region": "Sinnoh",
@@ -1946,11 +2247,32 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "fight-area",
+    "default_area": null,
+    "region": "Sinnoh",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
     "location_api_name": "floaroma-town",
     "default_area": "floaroma-town-area",
     "region": "Sinnoh",
     "type": "city",
     "wild_status": "empty"
+  },
+  {
+    "location_api_name": "fuego-ironworks",
+    "default_area": "fuego-ironworks-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "great-marsh",
+    "default_area": "great-marsh-area-1",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "hearthome-city",
@@ -1974,11 +2296,46 @@
     "wild_status": "empty"
   },
   {
+    "location_api_name": "lake-acuity",
+    "default_area": "lake-acuity-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "lake-valor",
+    "default_area": "lake-valor-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "lake-verity",
+    "default_area": "lake-verity-before-galactic-intervention",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "lost-tower",
+    "default_area": "lost-tower-1f",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "mt-coronet",
     "default_area": "mt-coronet-1f-route-207",
     "region": "Sinnoh",
     "type": "dungeon",
     "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "old-chateau",
+    "default_area": "old-chateau-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "empty"
   },
   {
     "location_api_name": "oreburgh-city",
@@ -1990,6 +2347,13 @@
   {
     "location_api_name": "oreburgh-gate",
     "default_area": "oreburgh-gate-1f",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "oreburgh-mine",
+    "default_area": "oreburgh-mine-1f",
     "region": "Sinnoh",
     "type": "dungeon",
     "wild_status": "non_empty"
@@ -2009,11 +2373,11 @@
     "wild_status": "non_empty"
   },
   {
-    "location_api_name": "route-223",
-    "default_area": "route-223-area",
+    "location_api_name": "resort-area",
+    "default_area": "resort-area-area",
     "region": "Sinnoh",
-    "type": "route",
-    "wild_status": "empty"
+    "type": "city",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "sandgem-town",
@@ -2021,6 +2385,13 @@
     "region": "Sinnoh",
     "type": "city",
     "wild_status": "empty"
+  },
+  {
+    "location_api_name": "sendoff-spring",
+    "default_area": "sendoff-spring-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "sinnoh-pokemon-league",
@@ -2156,11 +2527,95 @@
     "wild_status": "empty"
   },
   {
+    "location_api_name": "sinnoh-route-219",
+    "default_area": "sinnoh-route-219-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sinnoh-route-221",
+    "default_area": "sinnoh-route-221-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "sinnoh-route-222",
     "default_area": "route-222-area",
     "region": "Sinnoh",
     "type": "route",
     "wild_status": "empty"
+  },
+  {
+    "location_api_name": "sinnoh-route-224",
+    "default_area": "sinnoh-route-224-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sinnoh-route-225",
+    "default_area": "sinnoh-route-225-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sinnoh-route-227",
+    "default_area": "sinnoh-route-227-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sinnoh-route-228",
+    "default_area": "sinnoh-route-228-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sinnoh-route-229",
+    "default_area": "sinnoh-route-229-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sinnoh-sea-route-220",
+    "default_area": "sinnoh-sea-route-220-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sinnoh-sea-route-223",
+    "default_area": "sinnoh-sea-route-223-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sinnoh-sea-route-226",
+    "default_area": "sinnoh-sea-route-226-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sinnoh-sea-route-230",
+    "default_area": "sinnoh-sea-route-230-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "sinnoh-victory-road",
+    "default_area": "sinnoh-victory-road-1f",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "snowpoint-city",
@@ -2170,11 +2625,39 @@
     "wild_status": "empty"
   },
   {
+    "location_api_name": "solaceon-ruins",
+    "default_area": "solaceon-ruins-2f",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "solaceon-town",
     "default_area": "solaceon-town-area",
     "region": "Sinnoh",
     "type": "city",
     "wild_status": "empty"
+  },
+  {
+    "location_api_name": "spear-pillar",
+    "default_area": "spear-pillar-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "spring-path",
+    "default_area": "spring-path-area",
+    "region": "Sinnoh",
+    "type": "route",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "stark-mountain",
+    "default_area": "stark-mountain-entrance",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "sunyshore-city",
@@ -2184,10 +2667,45 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "trophy-garden",
+    "default_area": "trophy-garden-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "turnback-cave",
+    "default_area": "turnback-cave-1f",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
     "location_api_name": "twinleaf-town",
     "default_area": "twinleaf-town-area",
     "region": "Sinnoh",
     "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "valley-windworks",
+    "default_area": "valley-windworks-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "valor-cavern",
+    "default_area": null,
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "valor-lakefront",
+    "default_area": "valor-lakefront-area",
+    "region": "Sinnoh",
+    "type": "dungeon",
     "wild_status": "non_empty"
   },
   {
@@ -2198,11 +2716,32 @@
     "wild_status": "non_empty"
   },
   {
-    "location_api_name": "victory-road-sinnoh",
-    "default_area": "victory-road-sinnoh-area",
+    "location_api_name": "verity-cavern",
+    "default_area": null,
     "region": "Sinnoh",
     "type": "dungeon",
     "wild_status": "empty"
+  },
+  {
+    "location_api_name": "verity-lakefront",
+    "default_area": null,
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "wayward-cave",
+    "default_area": "wayward-cave-1f",
+    "region": "Sinnoh",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "abundant-shrine",
+    "default_area": "abundant-shrine-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "accumula-town",
@@ -2212,6 +2751,13 @@
     "wild_status": "empty"
   },
   {
+    "location_api_name": "aspertia-city",
+    "default_area": "aspertia-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "castelia-city",
     "default_area": "castelia-city-area",
     "region": "Unova",
@@ -2219,8 +2765,29 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "castelia-sewers",
+    "default_area": "castelia-sewers-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "celestial-tower",
+    "default_area": "celestial-tower-2f",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "chargestone-cave",
     "default_area": "chargestone-cave-1f",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "clay-tunnel",
+    "default_area": "clay-tunnel-area",
     "region": "Unova",
     "type": "dungeon",
     "wild_status": "non_empty"
@@ -2268,6 +2835,34 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "floccesy-ranch",
+    "default_area": "floccesy-ranch-outer",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "floccesy-town",
+    "default_area": "floccesy-town-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "giant-chasm",
+    "default_area": "giant-chasm-outside",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "humilau-city",
+    "default_area": "humilau-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "icirrus-city",
     "default_area": "icirrus-city-area",
     "region": "Unova",
@@ -2282,6 +2877,27 @@
     "wild_status": "empty"
   },
   {
+    "location_api_name": "lentimas-town",
+    "default_area": "lentimas-town-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "empty"
+  },
+  {
+    "location_api_name": "lostlorn-forest",
+    "default_area": "lostlorn-forest-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "mistralton-cave",
+    "default_area": "mistralton-cave-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "mistralton-city",
     "default_area": "mistralton-city-area",
     "region": "Unova",
@@ -2289,10 +2905,24 @@
     "wild_status": "empty"
   },
   {
+    "location_api_name": "moor-of-icirrus",
+    "default_area": "moor-of-icirrus-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "nacrene-city",
     "default_area": "nacrene-city-west-gate",
     "region": "Unova",
     "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "nature-sanctuary",
+    "default_area": "nature-sanctuary-area",
+    "region": "Unova",
+    "type": "dungeon",
     "wild_status": "non_empty"
   },
   {
@@ -2331,11 +2961,39 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "relic-passage",
+    "default_area": "relic-passage-castelia-sewers-entrance",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "reversal-mountain",
+    "default_area": "reversal-mountain-unknown-area-48",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "seaside-cave",
+    "default_area": "seaside-cave-1f",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "skyarrow-bridge",
     "default_area": "skyarrow-bridge-area",
     "region": "Unova",
     "type": "route",
     "wild_status": "empty"
+  },
+  {
+    "location_api_name": "strange-house",
+    "default_area": "strange-house-1f",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "striaton-city",
@@ -2359,6 +3017,13 @@
     "wild_status": "non_empty"
   },
   {
+    "location_api_name": "undella-bay",
+    "default_area": "undella-bay-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
     "location_api_name": "undella-town",
     "default_area": "undella-town-area",
     "region": "Unova",
@@ -2374,79 +3039,198 @@
   },
   {
     "location_api_name": "unova-route-1",
-    "default_area": "route-1-unova-area",
+    "default_area": "unova-route-1-area",
     "region": "Unova",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "unova-route-10",
-    "default_area": "route-10-unova-area",
+    "default_area": "unova-route-10-area",
     "region": "Unova",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-11",
+    "default_area": "unova-route-11-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-12",
+    "default_area": "unova-route-12-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-13",
+    "default_area": "unova-route-13-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-14",
+    "default_area": "unova-route-14-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-15",
+    "default_area": "unova-route-15-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-16",
+    "default_area": "unova-route-16-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-17",
+    "default_area": "unova-route-17-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-18",
+    "default_area": "unova-route-18-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-19",
+    "default_area": "unova-route-19-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "unova-route-2",
-    "default_area": "route-2-unova-area",
+    "default_area": "unova-route-2-area",
     "region": "Unova",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-20",
+    "default_area": "unova-route-20-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-21",
+    "default_area": "unova-route-21-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-22",
+    "default_area": "unova-route-22-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "unova-route-23",
+    "default_area": "unova-route-23-area",
+    "region": "Unova",
+    "type": "route",
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "unova-route-3",
-    "default_area": "route-3-unova-area",
+    "default_area": "unova-route-3-area",
     "region": "Unova",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "unova-route-4",
-    "default_area": "route-4-unova-area",
+    "default_area": "unova-route-4-area",
     "region": "Unova",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "unova-route-5",
-    "default_area": "route-5-unova-area",
+    "default_area": "unova-route-5-area",
     "region": "Unova",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "unova-route-6",
-    "default_area": "route-6-unova-area",
+    "default_area": "unova-route-6-area",
     "region": "Unova",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "unova-route-7",
-    "default_area": "route-7-unova-area",
+    "default_area": "unova-route-7-area",
     "region": "Unova",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "unova-route-8",
-    "default_area": "route-8-unova-area",
+    "default_area": "unova-route-8-area",
     "region": "Unova",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "unova-route-9",
-    "default_area": "route-9-unova-area",
+    "default_area": "unova-route-9-area",
     "region": "Unova",
     "type": "route",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
   },
   {
     "location_api_name": "unova-victory-road-2",
-    "default_area": "victory-road-unova-area",
+    "default_area": "unova-victory-road-2-unknown-area-71",
     "region": "Unova",
     "type": "dungeon",
-    "wild_status": "empty"
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "village-bridge",
+    "default_area": "village-bridge-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "virbank-city",
+    "default_area": "virbank-city-area",
+    "region": "Unova",
+    "type": "city",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "virbank-complex",
+    "default_area": "virbank-complex-outer",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
+  },
+  {
+    "location_api_name": "wellspring-cave",
+    "default_area": "wellspring-cave-area",
+    "region": "Unova",
+    "type": "dungeon",
+    "wild_status": "non_empty"
   }
 ]
